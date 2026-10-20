@@ -11,3 +11,12 @@ dist
 # Local-only: screenshots + prototype spec (never commit)
 ss/
 PROTOTYPE.md
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Local tool state (may contain machine paths / project IDs)
+.vercel/
+.claude/settings.local.json
