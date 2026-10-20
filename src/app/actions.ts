@@ -9,7 +9,6 @@ import {
   DELIVERABLES,
   STAGES,
   TASK_TYPES,
-  TEAM,
   type DeliverableKind,
   type Status,
   type TaskInput,
@@ -71,7 +70,7 @@ function isStatus(value: unknown): value is Status {
   return STAGES.some((s) => s.id === value);
 }
 
-function validate(input: TaskInput) {
+async function validate(input: TaskInput) {
   const title = input.title?.trim();
   if (!title) throw new InvalidInput('Give the task a title.');
   if (title.length > 200) throw new InvalidInput('Title must be 200 characters or fewer.');
@@ -79,9 +78,20 @@ function validate(input: TaskInput) {
   if (!UUID.test(input.projectId)) throw new InvalidInput('Invalid project.');
   if (!TASK_TYPES.includes(input.type)) throw new InvalidInput('Choose Feature or Bug.');
   if (!isStatus(input.status)) throw new InvalidInput('Choose a valid status.');
-  if (!(TEAM as readonly string[]).includes(input.assignee)) throw new InvalidInput('Choose a valid assignee.');
   if (input.contextTool && !CONTEXT_TOOLS.includes(input.contextTool)) throw new InvalidInput('Choose a valid AI tool.');
   if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) throw new InvalidInput('Enter a valid due date.');
+  if (input.dueTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.dueTime)) throw new InvalidInput('Enter a valid due time.');
+  if (input.dueTime && !input.dueDate) throw new InvalidInput('Set a due date before a due time.');
+  if (input.labelId && !UUID.test(input.labelId)) throw new InvalidInput('Choose a valid label.');
+
+  // Assignee and label must come from the placeholder lists in the database.
+  const db = supabase();
+  const [member, label] = await Promise.all([
+    db.from('members').select('id').eq('name', input.assignee).maybeSingle(),
+    input.labelId ? db.from('labels').select('id').eq('id', input.labelId).maybeSingle() : Promise.resolve({ data: true, error: null }),
+  ]);
+  if (member.error || !member.data) throw new InvalidInput('Choose an assignee from the list.');
+  if (label.error || !label.data) throw new InvalidInput('Choose a label from the list.');
 
   return {
     project_id: input.projectId,
@@ -90,7 +100,9 @@ function validate(input: TaskInput) {
     type: input.type,
     status: input.status,
     assignee: input.assignee,
+    label_id: input.labelId || null,
     due_date: input.dueDate || null,
+    due_time: input.dueDate && input.dueTime ? input.dueTime : null,
     context: input.context ?? '',
     context_tool: input.contextTool || null,
   };
@@ -111,7 +123,7 @@ async function run(projectId: string, work: () => Promise<{ error: { message: st
 
 export async function createTask(input: TaskInput): Promise<ActionResult> {
   return run(input.projectId, async () => {
-    const row = validate(input);
+    const row = await validate(input);
     return supabase()
       .from('tasks')
       .insert({ ...row, context_updated_at: row.context ? new Date().toISOString() : null });
@@ -121,7 +133,7 @@ export async function createTask(input: TaskInput): Promise<ActionResult> {
 export async function updateTask(id: string, input: TaskInput): Promise<ActionResult> {
   return run(input.projectId, async () => {
     if (!UUID.test(id)) throw new InvalidInput('Invalid task.');
-    const row = validate(input);
+    const row = await validate(input);
     const db = supabase();
 
     // Bump contextUpdatedAt only when the context text actually changed.

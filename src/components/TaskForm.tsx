@@ -1,20 +1,35 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
+import { MessageSquareText, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { createTask, deleteTask, updateTask } from '@/app/actions';
-import { STAGES, TASK_TYPES, TEAM, type BoardTask, type Status, type TaskInput, type TaskType } from '@/lib/types';
+import { CONTEXT_TEMPLATE, formatBriefing, hasContext } from '@/lib/context';
+import {
+  CONTEXT_TOOLS,
+  STAGES,
+  TASK_TYPES,
+  type BoardTask,
+  type ContextTool,
+  type Label,
+  type Member,
+  type Status,
+  type TaskInput,
+  type TaskType,
+} from '@/lib/types';
+import CopyButton from './CopyButton';
 import { ModalHeader, btn } from './Modal';
-import { TYPE_STYLE } from './task-style';
+import { LABEL_STYLE, TYPE_STYLE } from './task-style';
 
 const field =
-  'mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-brand-dark';
+  'mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-brand-dark';
 const labelCls = 'block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400';
 
-// Create or edit a task. Context fields are carried through unchanged.
+// Create or edit a task. Assignee and label come from the placeholder lists in the DB.
 export default function TaskForm({
   projectId,
   projectCode,
+  members,
+  labels,
   task,
   defaultStatus = 'todo',
   onDone,
@@ -22,6 +37,8 @@ export default function TaskForm({
 }: {
   projectId: string;
   projectCode: string;
+  members: Member[];
+  labels: Label[];
   task?: BoardTask;
   defaultStatus?: Status;
   onDone: () => void;
@@ -32,11 +49,17 @@ export default function TaskForm({
   const [description, setDescription] = useState(task?.description ?? '');
   const [type, setType] = useState<TaskType>(task?.type ?? 'feature');
   const [status, setStatus] = useState<Status>(task?.status ?? defaultStatus);
-  const [assignee, setAssignee] = useState(task?.assignee ?? TEAM[0]);
+  const [assignee, setAssignee] = useState(task?.assignee ?? members[0]?.name ?? '');
+  const [labelId, setLabelId] = useState(task?.labelId ?? '');
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '');
+  const [dueTime, setDueTime] = useState(task?.dueTime ?? '');
+  const [context, setContext] = useState(task ? task.context || CONTEXT_TEMPLATE : CONTEXT_TEMPLATE);
+  const [contextTool, setContextTool] = useState<ContextTool | ''>(task?.contextTool ?? '');
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const selectedLabel = labels.find((l) => l.id === labelId);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,9 +71,12 @@ export default function TaskForm({
       type,
       status,
       assignee,
+      labelId: labelId || null,
       dueDate: dueDate || null,
-      context: task?.context ?? '',
-      contextTool: task?.contextTool ?? null,
+      dueTime: dueDate && dueTime ? dueTime : null,
+      // An untouched template counts as "no context", so the card shows no indicator.
+      context: hasContext(context) ? context.trim() : '',
+      contextTool: contextTool || null,
     };
     startTransition(async () => {
       const result = task ? await updateTask(task.id, input) : await createTask(input);
@@ -109,7 +135,7 @@ export default function TaskForm({
           </label>
           <textarea
             id="task-description"
-            rows={3}
+            rows={2}
             maxLength={5000}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -161,12 +187,39 @@ export default function TaskForm({
               Assignee
             </label>
             <select id="task-assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)} className={field}>
-              {TEAM.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+              {members.map((m) => (
+                <option key={m.id} value={m.name}>
+                  {m.name}
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="task-label" className={labelCls}>
+              Colour label
+            </label>
+            <div className="relative">
+              {selectedLabel && (
+                <span
+                  className={`pointer-events-none absolute left-3 top-1/2 mt-[3px] h-2.5 w-2.5 -translate-y-1/2 rounded-full ${LABEL_STYLE[selectedLabel.color].dot}`}
+                  aria-hidden
+                />
+              )}
+              <select
+                id="task-label"
+                value={labelId}
+                onChange={(e) => setLabelId(e.target.value)}
+                className={`${field} ${selectedLabel ? 'pl-7' : ''}`}
+              >
+                <option value="">No label</option>
+                {labels.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({l.color})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -175,7 +228,68 @@ export default function TaskForm({
             </label>
             <input id="task-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={field} />
           </div>
+
+          <div>
+            <label htmlFor="task-due-time" className={labelCls}>
+              Due time <span className="normal-case tracking-normal text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="task-due-time"
+              type="time"
+              value={dueTime}
+              disabled={!dueDate}
+              onChange={(e) => setDueTime(e.target.value)}
+              aria-describedby="task-due-time-hint"
+              className={field}
+            />
+            <p id="task-due-time-hint" className="mt-1 text-xs text-slate-400">
+              {dueDate ? 'Blank = end of day' : 'Set a date first'}
+            </p>
+          </div>
         </div>
+
+        {/* AI context: paste-ready briefing for the next AI tool or teammate. */}
+        <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor="task-context" className={`${labelCls} flex items-center gap-1.5`}>
+              <MessageSquareText className="h-3.5 w-3.5" aria-hidden />
+              Context <span className="normal-case tracking-normal text-slate-400">(Markdown)</span>
+            </label>
+            <CopyButton getText={() => formatBriefing({ title, description, context }, projectCode)} label="Copy context" />
+          </div>
+          <textarea
+            id="task-context"
+            rows={8}
+            maxLength={20000}
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            className={`${field} font-mono text-xs leading-5`}
+            aria-describedby="task-context-hint"
+          />
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+            <p id="task-context-hint" className="max-w-xs text-xs text-slate-400">
+              Copies title, description and context as one Markdown briefing, ready to paste into any AI chat.
+            </p>
+            <div className="w-40">
+              <label htmlFor="task-context-tool" className={labelCls}>
+                AI tool
+              </label>
+              <select
+                id="task-context-tool"
+                value={contextTool}
+                onChange={(e) => setContextTool(e.target.value as ContextTool | '')}
+                className={field}
+              >
+                <option value="">None</option>
+                {CONTEXT_TOOLS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
       </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">

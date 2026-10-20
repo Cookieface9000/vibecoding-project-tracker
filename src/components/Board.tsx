@@ -11,14 +11,15 @@ import {
   useSensor,
   useSensors,
   type CollisionDetection,
-  type KeyboardCoordinateGetter,
   type DragEndEvent,
   type DragStartEvent,
+  type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
-import { Plus } from 'lucide-react';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { Pencil, Plus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { moveTask } from '@/app/actions';
-import { STAGES, type BoardTask, type Status } from '@/lib/types';
+import { STAGES, type BoardTask, type Label, type Member, type Status } from '@/lib/types';
+import EditPicker from './EditPicker';
 import Modal, { btn } from './Modal';
 import TaskCard, { TaskCardBody } from './TaskCard';
 import TaskDetails from './TaskDetails';
@@ -39,7 +40,12 @@ const URGENCY_LEGEND = [
   { label: 'Done', dot: 'bg-due-neutral' },
 ];
 
-type ModalState = { kind: 'view'; id: string } | { kind: 'edit'; id: string } | { kind: 'create'; status: Status } | null;
+type ModalState =
+  | { kind: 'view'; id: string }
+  | { kind: 'edit'; id: string; from: 'view' | 'pick' }
+  | { kind: 'create'; status: Status }
+  | { kind: 'pick' }
+  | null;
 
 const stageLabel = (id: unknown) => STAGES.find((s) => s.id === id)?.label ?? 'column';
 
@@ -65,10 +71,14 @@ const columnKeyboardCoordinates: KeyboardCoordinateGetter = (event, { context })
 
 export default function Board({
   tasks: serverTasks,
+  members,
+  labels,
   projectId,
   projectCode,
 }: {
   tasks: BoardTask[];
+  members: Member[];
+  labels: Label[];
   projectId: string;
   projectCode: string;
 }) {
@@ -82,6 +92,21 @@ export default function Board({
   const [, startTransition] = useTransition();
   const justDropped = useRef(false);
 
+  const labelById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
+  const labelOf = (task: BoardTask) => (task.labelId ? labelById.get(task.labelId) : undefined);
+
+  // Global keyboard shortcuts (Settings → Keyboard shortcuts) talk to the board via events.
+  useEffect(() => {
+    const newTask = () => setModal((m) => m ?? { kind: 'create', status: 'todo' });
+    const editTask = () => setModal((m) => m ?? { kind: 'pick' });
+    window.addEventListener('vt:new-task', newTask);
+    window.addEventListener('vt:edit-task', editTask);
+    return () => {
+      window.removeEventListener('vt:new-task', newTask);
+      window.removeEventListener('vt:edit-task', editTask);
+    };
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), // small move = click, not drag
     useSensor(KeyboardSensor, {
@@ -91,7 +116,8 @@ export default function Board({
   );
 
   const activeTask = tasks.find((t) => t.id === activeId) ?? null;
-  const modalTask = modal && modal.kind !== 'create' ? tasks.find((t) => t.id === modal.id) : undefined;
+  const modalTask = modal && (modal.kind === 'view' || modal.kind === 'edit') ? tasks.find((t) => t.id === modal.id) : undefined;
+  const close = () => setModal(null);
 
   function onDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id));
@@ -124,13 +150,21 @@ export default function Board({
     if (!justDropped.current) setModal({ kind: 'view', id });
   }
 
+  const formProps = { projectId, projectCode, members, labels };
+
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={() => setModal({ kind: 'create', status: 'todo' })} className={btn.secondary}>
-          <Plus className="h-4 w-4 text-brand dark:text-brand-dark" aria-hidden />
-          Add task
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setModal({ kind: 'create', status: 'todo' })} className={btn.secondary}>
+            <Plus className="h-4 w-4 text-brand dark:text-brand-dark" aria-hidden />
+            Add task
+          </button>
+          <button type="button" onClick={() => setModal({ kind: 'pick' })} className={btn.secondary} disabled={tasks.length === 0}>
+            <Pencil className="h-4 w-4 text-brand dark:text-brand-dark" aria-hidden />
+            Edit task
+          </button>
+        </div>
         <ul aria-label="Task urgency" className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
           {URGENCY_LEGEND.map((item) => (
             <li key={item.label} className="flex items-center gap-1.5">
@@ -173,44 +207,51 @@ export default function Board({
               id={stage.id}
               label={stage.label}
               tasks={tasks.filter((t) => t.status === stage.id)}
+              labelOf={labelOf}
               onOpen={open}
               onAdd={() => setModal({ kind: 'create', status: stage.id })}
             />
           ))}
         </div>
 
-        <DragOverlay dropAnimation={null}>{activeTask && <TaskCardBody task={activeTask} lifted />}</DragOverlay>
+        <DragOverlay dropAnimation={null}>
+          {activeTask && <TaskCardBody task={activeTask} label={labelOf(activeTask)} lifted />}
+        </DragOverlay>
       </DndContext>
 
       {modal?.kind === 'create' && (
-        <Modal labelledBy="new-task" onClose={() => setModal(null)}>
-          <TaskForm
-            projectId={projectId}
-            projectCode={projectCode}
-            defaultStatus={modal.status}
-            onDone={() => setModal(null)}
-            onCancel={() => setModal(null)}
+        <Modal labelledBy="new-task" onClose={close}>
+          <TaskForm {...formProps} defaultStatus={modal.status} onDone={close} onCancel={close} />
+        </Modal>
+      )}
+      {modal?.kind === 'pick' && (
+        <Modal labelledBy="pick-task" onClose={close}>
+          <EditPicker
+            tasks={tasks}
+            labelOf={labelOf}
+            onPick={(id) => setModal({ kind: 'edit', id, from: 'pick' })}
+            onClose={close}
           />
         </Modal>
       )}
       {modal?.kind === 'view' && modalTask && (
-        <Modal labelledBy={`task-title-${modalTask.id}`} onClose={() => setModal(null)}>
+        <Modal labelledBy={`task-title-${modalTask.id}`} onClose={close}>
           <TaskDetails
             task={modalTask}
+            taskLabel={labelOf(modalTask)}
             projectCode={projectCode}
-            onEdit={() => setModal({ kind: 'edit', id: modalTask.id })}
-            onClose={() => setModal(null)}
+            onEdit={() => setModal({ kind: 'edit', id: modalTask.id, from: 'view' })}
+            onClose={close}
           />
         </Modal>
       )}
       {modal?.kind === 'edit' && modalTask && (
-        <Modal labelledBy={`edit-task-${modalTask.id}`} onClose={() => setModal(null)}>
+        <Modal labelledBy={`edit-task-${modalTask.id}`} onClose={close}>
           <TaskForm
-            projectId={projectId}
-            projectCode={projectCode}
+            {...formProps}
             task={modalTask}
-            onDone={() => setModal(null)}
-            onCancel={() => setModal({ kind: 'view', id: modalTask.id })}
+            onDone={close}
+            onCancel={() => setModal(modal.from === 'pick' ? { kind: 'pick' } : { kind: 'view', id: modalTask.id })}
           />
         </Modal>
       )}
@@ -222,12 +263,14 @@ function Column({
   id,
   label,
   tasks,
+  labelOf,
   onOpen,
   onAdd,
 }: {
   id: Status;
   label: string;
   tasks: BoardTask[];
+  labelOf: (task: BoardTask) => Label | undefined;
   onOpen: (id: string) => void;
   onAdd: () => void;
 }) {
@@ -248,7 +291,7 @@ function Column({
         }`}
       >
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onOpen={() => onOpen(task.id)} />
+          <TaskCard key={task.id} task={task} label={labelOf(task)} onOpen={() => onOpen(task.id)} />
         ))}
         <button
           type="button"

@@ -1,3 +1,6 @@
+// `rgb(var(--x) / <alpha-value>)` keeps opacity modifiers like bg-due-safe/10 working.
+const v = (name) => `rgb(var(${name}) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{ts,tsx}'],
@@ -22,19 +25,30 @@ export default {
           card: '#FFFFFF',
           'card-dark': '#1C1F24',
         },
+        // Meaning-carrying colours are CSS variables (globals.css) so the
+        // colour-vision setting can re-map them app-wide.
         stage: {
-          todo: '#64748B',
-          progress: '#2563EB',
-          review: '#7C3AED',
-          done: '#16A34A',
+          todo: v('--c-todo'),
+          progress: v('--c-progress'),
+          review: v('--c-review'),
+          done: v('--c-done'),
         },
-        feature: '#4F46E5',
-        bug: '#DC2626',
+        feature: v('--c-feature'),
+        bug: v('--c-bug'),
         due: {
-          safe: '#16A34A',
-          warning: '#F59E0B',
-          overdue: '#DC2626',
-          neutral: '#94A3B8',
+          safe: v('--c-safe'),
+          warning: v('--c-warning'),
+          overdue: v('--c-overdue'),
+          neutral: v('--c-neutral'),
+        },
+        // Readable text on tinted chips (darker in light mode, lighter in dark mode).
+        ink: {
+          safe: v('--ink-safe'),
+          warning: v('--ink-warning'),
+          overdue: v('--ink-overdue'),
+          neutral: v('--ink-neutral'),
+          feature: v('--ink-feature'),
+          bug: v('--ink-bug'),
         },
       },
     },

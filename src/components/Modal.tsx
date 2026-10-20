@@ -7,29 +7,36 @@ import { useEffect, useRef } from 'react';
 export default function Modal({
   onClose,
   labelledBy,
+  size = 'md',
   children,
 }: {
   onClose: () => void;
   labelledBy: string;
+  size?: 'md' | 'lg';
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
+  // No close() in cleanup: removing the element already closes it, and a close() there
+  // (e.g. during React StrictMode's effect re-run) fires a stray `close` event that
+  // used to shut the modal right after it opened.
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
     // showModal() focuses the first button; prefer a field marked data-autofocus.
     dialog?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
-    return () => dialog?.close();
   }, []);
 
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      // Ignore stale close events if the dialog is (still/again) open.
+      onClose={() => {
+        if (!ref.current?.open) onClose();
+      }}
       onClick={(e) => e.target === e.currentTarget && ref.current?.close()}
       aria-labelledby={labelledBy}
-      className="m-auto w-[min(42rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-surface-card p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/50 backdrop:backdrop-blur-sm dark:border-slate-700 dark:bg-surface-card-dark dark:text-slate-100"
+      className={(size === 'lg' ? 'w-[min(60rem,calc(100vw-2rem))] ' : 'w-[min(42rem,calc(100vw-2rem))] ') + "m-auto rounded-xl border border-slate-200 bg-surface-card p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/50 backdrop:backdrop-blur-sm dark:border-slate-700 dark:bg-surface-card-dark dark:text-slate-100"}
     >
       <div className="flex max-h-[85vh] flex-col">{children}</div>
     </dialog>

@@ -1,5 +1,6 @@
 import { FolderKanban, LayoutGrid, Plus } from 'lucide-react';
 import Link from 'next/link';
+import SettingsButton from '@/components/settings/SettingsButton';
 import { listProjects } from '@/lib/data';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import type { Project } from '@/lib/types';
@@ -25,7 +26,7 @@ export default async function AppShell({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 flex-col bg-surface-sidebar text-slate-300 dark:bg-surface-sidebar-dark md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-surface-sidebar text-slate-300 dark:bg-surface-sidebar-dark md:flex">
         <div className="flex items-center gap-2.5 px-5 pb-5 pt-6">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand font-heading text-base font-bold text-white">
             V
@@ -77,9 +78,16 @@ export default async function AppShell({
             );
           })}
         </nav>
+
+        {/* Settings cog, pinned to the bottom of the sidebar. */}
+        <div className="border-t border-white/[0.06] px-3 py-3">
+          <SettingsButton />
+        </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-surface-page dark:bg-surface-page-dark">{children}</div>
+      <div id="main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col bg-surface-page outline-none dark:bg-surface-page-dark">
+        {children}
+      </div>
     </div>
   );
 }

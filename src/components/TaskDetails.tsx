@@ -1,10 +1,12 @@
 'use client';
 
-import { CalendarDays, History, MessageSquareText, Pencil, User } from 'lucide-react';
+import { CalendarDays, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
+import { formatBriefing, hasContext } from '@/lib/context';
 import { dueLabel, dueState } from '@/lib/due';
-import { STAGES, type BoardTask } from '@/lib/types';
+import { STAGES, type BoardTask, type Label } from '@/lib/types';
+import CopyButton from './CopyButton';
 import { ModalHeader, btn } from './Modal';
-import { DUE_STYLE, STAGE_DOT, TYPE_STYLE, initials } from './task-style';
+import { DUE_STYLE, LABEL_STYLE, STAGE_DOT, TYPE_STYLE, initials } from './task-style';
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const dateTimeFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -27,11 +29,13 @@ function timeAgo(iso: string) {
 // Read-only ticket view shown when a card is clicked.
 export default function TaskDetails({
   task,
+  taskLabel,
   projectCode,
   onEdit,
   onClose,
 }: {
   task: BoardTask;
+  taskLabel?: Label;
   projectCode: string;
   onEdit: () => void;
   onClose: () => void;
@@ -46,7 +50,6 @@ export default function TaskDetails({
     <>
       <ModalHeader
         id={`task-title-${task.id}`}
-        accent={type.stripe}
         eyebrow={
           <>
             <span className="font-mono text-slate-500 dark:text-slate-400">#{projectCode}</span>
@@ -61,8 +64,8 @@ export default function TaskDetails({
       />
 
       <div className="space-y-6 overflow-y-auto px-6 py-5">
-        {/* Key facts: fixed 2×2 grid so every modal lines up the same way */}
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+        {/* Key facts: fixed 3×2 grid so every modal lines up the same way */}
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
           <Fact label="Status">
             <span className="inline-flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${STAGE_DOT[task.status]}`} aria-hidden />
@@ -81,6 +84,7 @@ export default function TaskDetails({
             {task.dueDate ? (
               <span className="inline-flex flex-wrap items-center gap-2">
                 {formatDate(task.dueDate)}
+                {task.dueTime && <span className="text-slate-500 dark:text-slate-400">{task.dueTime}</span>}
                 {label && (
                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${due.chip}`}>
                     <due.Icon className="h-3 w-3" aria-hidden />
@@ -92,8 +96,21 @@ export default function TaskDetails({
               <span className="text-slate-400">No due date</span>
             )}
           </Fact>
+          <Fact label="Label" icon={Tag}>
+            {taskLabel ? (
+              <span className={"inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium " + LABEL_STYLE[taskLabel.color].chip}>
+                <span className={"h-2 w-2 rounded-full " + LABEL_STYLE[taskLabel.color].dot} aria-hidden />
+                {taskLabel.name}
+              </span>
+            ) : (
+              <span className="text-slate-400">No label</span>
+            )}
+          </Fact>
           <Fact label="Created" icon={CalendarDays}>
             {formatDate(task.createdDate)}
+          </Fact>
+          <Fact label="AI tool" icon={MessageSquareText}>
+            {task.contextTool ?? <span className="text-slate-400">None</span>}
           </Fact>
         </dl>
 
@@ -112,12 +129,17 @@ export default function TaskDetails({
               : undefined
           }
         >
-          {task.context ? (
+          {hasContext(task.context) ? (
+            <>
             <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-mono text-xs leading-5 text-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
               {task.context}
             </pre>
+            <div className="mt-2 flex justify-end">
+              <CopyButton getText={() => formatBriefing(task, projectCode)} />
+            </div>
+            </>
           ) : (
-            <Empty>No context yet.</Empty>
+            <Empty>No context yet. Use Edit to add a briefing.</Empty>
           )}
         </Section>
 

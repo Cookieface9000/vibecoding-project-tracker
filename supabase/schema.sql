@@ -11,6 +11,21 @@ create table if not exists public.projects (
   created_at   timestamptz not null default now()
 );
 
+-- Placeholder people a task can be assigned to.
+create table if not exists public.members (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique check (char_length(btrim(name)) between 1 and 60),
+  created_at  timestamptz not null default now()
+);
+
+-- Colour labels. `color` is a fixed palette key the UI maps to classes.
+create table if not exists public.labels (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique check (char_length(btrim(name)) between 1 and 40),
+  color       text not null check (color in ('blue', 'violet', 'pink', 'orange', 'teal', 'slate')),
+  created_at  timestamptz not null default now()
+);
+
 create table if not exists public.tasks (
   id                  uuid primary key default gen_random_uuid(),
   project_id          uuid not null references public.projects (id) on delete cascade,
@@ -19,8 +34,10 @@ create table if not exists public.tasks (
   type                text not null default 'feature' check (type in ('feature', 'bug')),
   status              text not null default 'todo'
                         check (status in ('todo', 'in-progress', 'review', 'done')),
-  assignee            text not null default 'Me',
+  assignee            text not null default 'Me',          -- a members.name
+  label_id            uuid references public.labels (id) on delete set null,
   due_date            date,
+  due_time            time,                                -- optional; null = end of day
   created_date        date not null default current_date,
   context             text not null default '',
   context_tool        text check (context_tool in ('Claude', 'ChatGPT', 'Cursor', 'Lovable', 'Replit', 'Other')),
@@ -49,6 +66,8 @@ create table if not exists public.deliverables (
 
 -- RLS on with NO policies: the public (publishable/anon) key can read or write nothing.
 -- The app talks to Supabase only from the server with the secret key, which bypasses RLS.
+alter table public.members enable row level security;
+alter table public.labels enable row level security;
 alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_prompts enable row level security;

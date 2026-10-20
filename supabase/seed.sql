@@ -2,6 +2,14 @@
 -- Run after schema.sql: Dashboard → SQL Editor → paste → Run.
 -- Due dates are relative to today so every urgency colour shows: on track, due soon, overdue, done.
 
+-- Placeholder members and colour labels.
+insert into public.members (name) values ('Me'), ('Alex Morgan'), ('Sam Patel'), ('Jordan Lee'), ('Riley Chen')
+on conflict (name) do nothing;
+insert into public.labels (name, color) values
+  ('Frontend', 'blue'), ('Backend', 'violet'), ('Design', 'pink'),
+  ('Infrastructure', 'orange'), ('Docs', 'teal'), ('Research', 'slate')
+on conflict (name) do nothing;
+
 with p as (
   insert into public.projects (name, code, client, description)
   values ('Customer Portal', 'CP', 'Internal', 'Self-service portal for account settings and billing.')
@@ -42,3 +50,12 @@ from public.tasks t,
     ('Cursor', E'Add a dual-read wrapper: read v2 first, fall back to legacy on 404, and log which source answered.', interval '2 hours')
   ) as v(tool, prompt, ago)
 where t.title = 'Migrate user settings to new API';
+
+-- Labels and a due time on the demo tasks.
+update public.tasks set label_id = (select id from public.labels where name = 'Backend')
+  where title in ('Add rate limiting to /login', 'Migrate user settings to new API');
+update public.tasks set label_id = (select id from public.labels where name = 'Frontend')
+  where title = 'Checkout total rounds incorrectly';
+update public.tasks set label_id = (select id from public.labels where name = 'Infrastructure')
+  where title = 'Set up CI pipeline';
+update public.tasks set due_time = '17:00' where title = 'Migrate user settings to new API';

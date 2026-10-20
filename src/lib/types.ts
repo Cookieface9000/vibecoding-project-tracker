@@ -11,9 +11,21 @@ export const STAGES = [
 
 export type Status = (typeof STAGES)[number]['id'];
 
-// Valid values for `Task.assignee`. Placeholder until the `members` table (PRD FR-14) replaces it;
-// a personal board has one member, a team board several.
-export const TEAM = ['Me'] as const;
+/** Someone a task can be assigned to (placeholder list in the `members` table). */
+export interface Member {
+  id: string;
+  name: string;
+}
+
+export const LABEL_COLORS = ['blue', 'violet', 'pink', 'orange', 'teal', 'slate'] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+
+/** A colour label from the `labels` table. */
+export interface Label {
+  id: string;
+  name: string;
+  color: LabelColor;
+}
 
 export const TASK_TYPES = ['feature', 'bug'] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
@@ -44,8 +56,10 @@ export interface Task {
   description: string;
   type: TaskType;
   status: Status;
-  assignee: string;
+  assignee: string; // a Member name
+  labelId: string | null;
   dueDate: string | null; // ISO 'YYYY-MM-DD'
+  dueTime: string | null; // 'HH:MM'; null = end of the due day
   createdDate: string; // ISO 'YYYY-MM-DD'
   // AI context
   context: string;

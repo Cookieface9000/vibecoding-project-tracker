@@ -2,6 +2,102 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Meaning-carrying colours (DESIGN.md §2) as RGB triplets.
+ * `data-cvd` on <html> (Settings → Accessibility) swaps them app-wide.
+ */
+:root {
+  --c-safe: 22 163 74;       /* green: on track */
+  --c-warning: 245 158 11;   /* amber: due soon */
+  --c-overdue: 220 38 38;    /* red: overdue */
+  --c-neutral: 148 163 184;  /* grey: done */
+  --c-feature: 79 70 229;    /* indigo */
+  --c-bug: 220 38 38;        /* red */
+  --c-todo: 100 116 139;
+  --c-progress: 37 99 235;
+  --c-review: 124 58 237;
+  --c-done: 22 163 74;
+
+  --ink-safe: 22 101 52;
+  --ink-warning: 146 64 14;
+  --ink-overdue: 153 27 27;
+  --ink-neutral: 71 85 105;
+  --ink-feature: 67 56 202;
+  --ink-bug: 185 28 28;
+}
+.dark {
+  --ink-safe: 134 239 172;
+  --ink-warning: 252 211 77;
+  --ink-overdue: 252 165 165;
+  --ink-neutral: 203 213 225;
+  --ink-feature: 165 180 252;
+  --ink-bug: 252 165 165;
+}
+
+/* Red–green safe (protanopia / deuteranopia): blue / yellow / vermillion (Okabe–Ito). */
+[data-cvd='redgreen'] {
+  --c-safe: 0 114 178;
+  --c-warning: 230 159 0;
+  --c-overdue: 213 94 0;
+  --c-feature: 204 121 167;
+  --c-bug: 213 94 0;
+  --c-progress: 0 114 178;
+  --c-review: 204 121 167;
+  --c-done: 0 158 115;
+  --ink-safe: 0 82 128;
+  --ink-warning: 120 80 0;
+  --ink-overdue: 150 60 0;
+  --ink-feature: 140 50 100;
+  --ink-bug: 150 60 0;
+}
+[data-cvd='redgreen'].dark {
+  --ink-safe: 120 190 235;
+  --ink-warning: 240 200 90;
+  --ink-overdue: 255 160 110;
+  --ink-feature: 235 160 205;
+  --ink-bug: 255 160 110;
+}
+
+/* Blue–yellow safe (tritanopia): green / magenta / dark red. */
+[data-cvd='blueyellow'] {
+  --c-safe: 0 140 90;
+  --c-warning: 220 38 127;
+  --c-overdue: 150 0 0;
+  --c-feature: 0 140 90;
+  --c-bug: 150 0 0;
+  --c-progress: 220 38 127;
+  --c-review: 120 94 240;
+  --c-done: 0 140 90;
+  --ink-safe: 0 95 60;
+  --ink-warning: 150 20 85;
+  --ink-overdue: 120 0 0;
+  --ink-feature: 0 95 60;
+  --ink-bug: 120 0 0;
+}
+[data-cvd='blueyellow'].dark {
+  --ink-safe: 110 220 170;
+  --ink-warning: 250 140 195;
+  --ink-overdue: 255 140 140;
+  --ink-feature: 110 220 170;
+  --ink-bug: 255 140 140;
+}
+
+/* Monochrome: no colour at all; meaning comes from icons and text. Dialogs sit in the
+   top layer, outside <html>'s filter, so they get it too. */
+[data-cvd='mono'],
+[data-cvd='mono'] dialog {
+  filter: grayscale(1);
+}
+
+/* Reduce motion (Settings → Accessibility, or the OS setting). */
+[data-motion='reduce'] *,
+[data-motion='reduce'] *::before,
+[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 html, body {
   height: 100%;
 }
