@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google';
+import Script from 'next/script';
 import SettingsProvider from '@/components/settings/SettingsProvider';
 import './globals.css';
 
@@ -28,10 +29,10 @@ const initScript = `(() => {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${body.variable} ${heading.variable} ${mono.variable}`}>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: initScript }} />
-      </head>
       <body>
+        <Script id="init-prefs" strategy="beforeInteractive">
+          {initScript}
+        </Script>
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"

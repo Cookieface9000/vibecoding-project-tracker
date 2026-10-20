@@ -163,6 +163,17 @@ export async function moveTask(id: string, projectId: string, status: Status): P
   });
 }
 
+/** "Hand off to…": reassign a task to another member in one step. */
+export async function handOffTask(id: string, projectId: string, assignee: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
+    const db = supabase();
+    const { data: member } = await db.from('members').select('name').eq('name', assignee).maybeSingle();
+    if (!member) throw new InvalidInput('Choose someone from the list.');
+    return db.from('tasks').update({ assignee: member.name }).eq('id', id).eq('project_id', projectId);
+  });
+}
+
 export async function deleteTask(id: string, projectId: string): Promise<ActionResult> {
   return run(projectId, async () => {
     if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
@@ -172,12 +183,23 @@ export async function deleteTask(id: string, projectId: string): Promise<ActionR
 
 // ── Pinned links ────────────────────────────────────────────────────────────
 
-export async function setDeliverable(projectId: string, kind: DeliverableKind, url: string) {
-  if (!UUID.test(projectId)) throw new Error('Invalid project');
-  if (!DELIVERABLES.includes(kind)) throw new Error('Invalid deliverable');
-  const trimmed = url.trim();
-  if (trimmed && !/^https?:\/\//i.test(trimmed)) throw new Error('URL must start with http:// or https://');
-  const { error } = await supabase().from('deliverables').upsert({ project_id: projectId, kind, url: trimmed });
-  if (error) throw new Error(`Failed to save deliverable: ${error.message}`);
-  revalidatePath(`/projects/${projectId}`);
+export async function setDeliverable(projectId: string, kind: DeliverableKind, url: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(projectId)) throw new InvalidInput('Invalid project.');
+    if (!DELIVERABLES.includes(kind)) throw new InvalidInput('Invalid link slot.');
+    const trimmed = url.trim();
+    if (trimmed.length > 2000) throw new InvalidInput('That link is too long.');
+    if (trimmed) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmed);
+      } catch {
+        throw new InvalidInput('Enter a full link, e.g. https://example.com');
+      }
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        throw new InvalidInput('Links must start with http:// or https://');
+      }
+    }
+    return supabase().from('deliverables').upsert({ project_id: projectId, kind, url: trimmed });
+  });
 }

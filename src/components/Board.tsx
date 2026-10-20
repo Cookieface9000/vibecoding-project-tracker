@@ -16,14 +16,16 @@ import {
   type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
 import { Pencil, Plus } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { moveTask } from '@/app/actions';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { handOffTask, moveTask } from '@/app/actions';
 import { STAGES, type BoardTask, type Label, type Member, type Status } from '@/lib/types';
 import EditPicker from './EditPicker';
 import Modal, { btn } from './Modal';
 import TaskCard, { TaskCardBody } from './TaskCard';
 import TaskDetails from './TaskDetails';
 import TaskForm from './TaskForm';
+import Toast, { type ToastMessage } from './Toast';
+import { initials } from './task-style';
 
 // Coloured underline per stage (DESIGN.md §2): grey → blue → violet → green.
 const STAGE_BAR: Record<Status, string> = {
@@ -90,7 +92,32 @@ export default function Board({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [handingOff, setHandingOff] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const clearToast = useCallback(() => setToast(null), []);
   const justDropped = useRef(false);
+
+  /** "Hand off to…": reassign straight away, confirm with a toast, roll back on failure. */
+  function handOff(task: BoardTask, assignee: string) {
+    const before = tasks;
+    setTasks((current) => current.map((t) => (t.id === task.id ? { ...t, assignee } : t)));
+    setHandingOff(true);
+    startTransition(async () => {
+      const result = await handOffTask(task.id, projectId, assignee);
+      setHandingOff(false);
+      if (result.ok) {
+        setToast({ kind: 'ok', text: `Handed off to ${assignee}.`, id: Date.now() });
+      } else {
+        setTasks(before);
+        setToast({ kind: 'error', text: result.error, id: Date.now() });
+      }
+    });
+  }
+
+  // M7: who is driving what — open (not done) tasks per person.
+  const driving = members
+    .map((m) => ({ name: m.name, count: tasks.filter((t) => t.assignee === m.name && t.status !== 'done').length }))
+    .filter((d) => d.count > 0);
 
   const labelById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
   const labelOf = (task: BoardTask) => (task.labelId ? labelById.get(task.labelId) : undefined);
@@ -175,6 +202,26 @@ export default function Board({
         </ul>
       </div>
 
+      {driving.length > 0 && (
+        <section aria-label="Who's driving what" className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Driving</span>
+          {driving.map((d) => (
+            <span
+              key={d.name}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white py-0.5 pl-0.5 pr-2.5 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[9px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200" aria-hidden>
+                {initials(d.name)}
+              </span>
+              {d.name}
+              <span className="text-slate-400">
+                · {d.count} open
+              </span>
+            </span>
+          ))}
+        </section>
+      )}
+
       {error && (
         <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
           {error}
@@ -240,6 +287,9 @@ export default function Board({
             task={modalTask}
             taskLabel={labelOf(modalTask)}
             projectCode={projectCode}
+            members={members}
+            handingOff={handingOff}
+            onHandOff={(assignee) => handOff(modalTask, assignee)}
             onEdit={() => setModal({ kind: 'edit', id: modalTask.id, from: 'view' })}
             onClose={close}
           />
@@ -255,6 +305,8 @@ export default function Board({
           />
         </Modal>
       )}
+
+      <Toast toast={toast} onDone={clearToast} />
     </>
   );
 }

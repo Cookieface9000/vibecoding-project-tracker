@@ -3,7 +3,7 @@
 import { CalendarDays, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
 import { formatBriefing, hasContext } from '@/lib/context';
 import { dueLabel, dueState } from '@/lib/due';
-import { STAGES, type BoardTask, type Label } from '@/lib/types';
+import { STAGES, type BoardTask, type Label, type Member } from '@/lib/types';
 import CopyButton from './CopyButton';
 import { ModalHeader, btn } from './Modal';
 import { DUE_STYLE, LABEL_STYLE, STAGE_DOT, TYPE_STYLE, initials } from './task-style';
@@ -26,17 +26,24 @@ function timeAgo(iso: string) {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-// Read-only ticket view shown when a card is clicked.
+// Ticket view shown when a card is clicked. Everything is read-only except
+// "Hand off to…", which reassigns in one step.
 export default function TaskDetails({
   task,
   taskLabel,
   projectCode,
+  members,
+  handingOff = false,
+  onHandOff,
   onEdit,
   onClose,
 }: {
   task: BoardTask;
   taskLabel?: Label;
   projectCode: string;
+  members: Member[];
+  handingOff?: boolean;
+  onHandOff: (assignee: string) => void;
   onEdit: () => void;
   onClose: () => void;
 }) {
@@ -79,6 +86,25 @@ export default function TaskDetails({
               </span>
               {task.assignee}
             </span>
+            <label htmlFor={`handoff-${task.id}`} className="sr-only">
+              Hand off to
+            </label>
+            <select
+              id={`handoff-${task.id}`}
+              value=""
+              disabled={handingOff}
+              onChange={(e) => e.target.value && onHandOff(e.target.value)}
+              className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <option value="">{handingOff ? 'Handing off…' : 'Hand off to…'}</option>
+              {members
+                .filter((m) => m.name !== task.assignee)
+                .map((m) => (
+                  <option key={m.id} value={m.name}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
           </Fact>
           <Fact label="Due date" icon={CalendarDays}>
             {task.dueDate ? (
