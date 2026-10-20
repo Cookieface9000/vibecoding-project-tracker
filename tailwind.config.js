@@ -11,16 +11,16 @@ export default {
       },
       // Design tokens — see DESIGN.md §2.
       colors: {
-        brand: { DEFAULT: '#4F46E5', dark: '#818CF8' },
+        brand: { DEFAULT: '#16A34A', dark: '#22C55E' },
         surface: {
-          page: '#F6F7FB',
-          'page-dark': '#0B0F19',
-          sidebar: '#FFFFFF',
-          'sidebar-dark': '#0F1422',
-          column: '#EEF0F6',
-          'column-dark': '#121827',
+          page: '#F7F7F8',
+          'page-dark': '#0E1013',
+          sidebar: '#1F2124',
+          'sidebar-dark': '#15171A',
+          header: '#FFFFFF',
+          'header-dark': '#15171A',
           card: '#FFFFFF',
-          'card-dark': '#182033',
+          'card-dark': '#1C1F24',
         },
         stage: {
           todo: '#64748B',
