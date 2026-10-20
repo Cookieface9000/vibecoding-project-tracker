@@ -11,12 +11,11 @@ export interface BlockerControls {
   busy: boolean;
   onAdd: (blockerId: string) => void;
   onCreate: (title: string) => void;
-  onToggle: (blockerId: string, active: boolean) => void;
   onRemove: (blockerId: string) => void;
 }
 
-// "Blocked by", managed from inside the task: add an existing task or create a new one as a
-// blocker, and choose which blockers are active (inactive ones are kept but don't block).
+// Blockers, managed from inside the task: choose an existing task, create a new one, or remove one.
+// The task is blocked while any blocker isn't done.
 export default function BlockerManager({
   task,
   allTasks,
@@ -39,8 +38,6 @@ export default function BlockerManager({
 
   return (
     <div>
-      <p className="mb-1.5 text-[12px] font-medium text-fg-muted">Blocked by</p>
-
       {links.length === 0 ? (
         <p className="mb-3 text-[13px] text-fg-subtle">Nothing is blocking this task.</p>
       ) : (
@@ -49,7 +46,6 @@ export default function BlockerManager({
             const blocker = byId.get(link.taskId)!;
             const blocking = isLinkBlocking(link, byId);
             const done = blocker.status === 'done';
-            const switchId = `blocker-active-${task.id}-${blocker.id}`;
             return (
               <li key={link.taskId} className={`flex items-center gap-3 px-3 py-2 ${blocking ? 'bg-[color-mix(in_srgb,rgb(var(--c-overdue))_6%,rgb(var(--raised)))]' : ''}`}>
                 <button
@@ -58,34 +54,15 @@ export default function BlockerManager({
                   className="flex min-w-0 flex-1 items-center gap-2 text-left text-[13px] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <span className={`h-2 w-2 shrink-0 rounded-full ${STAGE_DOT[blocker.status]}`} aria-hidden />
-                  <span className={`truncate ${link.active ? 'text-fg' : 'text-fg-subtle line-through decoration-fg-subtle/50'}`}>{blocker.title}</span>
+                  <span className={`truncate ${done ? 'text-fg-subtle line-through decoration-fg-subtle/50' : 'text-fg'}`}>{blocker.title}</span>
                   <span className="shrink-0 text-[11px] text-fg-subtle">{STAGES.find((s) => s.id === blocker.status)?.label}</span>
                 </button>
 
                 {/* Status text, so the state isn't colour-only */}
                 <span className={`hidden w-20 shrink-0 items-center gap-1 text-[11px] font-medium sm:inline-flex ${blocking ? 'text-ink-overdue' : 'text-fg-subtle'}`}>
                   {blocking && <Lock className="h-3 w-3" aria-hidden />}
-                  {blocking ? 'Blocking' : done ? 'Done' : link.active ? 'Active' : 'Not active'}
+                  {blocking ? 'Blocking' : done ? 'Done' : 'Not blocking'}
                 </span>
-
-                {/* Active switch */}
-                <label htmlFor={switchId} className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[12px] text-fg-muted">
-                  <button
-                    id={switchId}
-                    type="button"
-                    role="switch"
-                    aria-checked={link.active}
-                    aria-label={`${blocker.title} is an active blocker`}
-                    disabled={controls.busy}
-                    onClick={() => controls.onToggle(blocker.id, !link.active)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50 ${
-                      link.active ? 'bg-brand' : 'bg-line-strong'
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${link.active ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-                  </button>
-                  Active
-                </label>
 
                 <button
                   type="button"
@@ -115,7 +92,7 @@ export default function BlockerManager({
           }}
         >
           <label htmlFor={`add-blocker-${task.id}`} className="block text-[12px] font-medium text-fg-muted">
-            Add an existing task
+            Choose an existing task
           </label>
           <div className="mt-1.5 flex gap-2">
             <select
@@ -155,7 +132,7 @@ export default function BlockerManager({
           }}
         >
           <label htmlFor={`new-blocker-${task.id}`} className="block text-[12px] font-medium text-fg-muted">
-            Or create a new blocker
+            Or create a new one
           </label>
           <div className="mt-1.5 flex gap-2">
             <input
@@ -171,7 +148,7 @@ export default function BlockerManager({
               Create
             </button>
           </div>
-          <p className="mt-1 text-[11px] text-fg-subtle">Added to To Do and set as an active blocker.</p>
+          <p className="mt-1 text-[11px] text-fg-subtle">Added to To Do as a blocker.</p>
         </form>
       </div>
     </div>

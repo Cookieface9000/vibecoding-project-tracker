@@ -117,10 +117,6 @@ export default function DependencyGraph({ tasks }: { tasks: BoardTask[] }) {
           <span className="h-0 w-5 border-t border-dashed border-fg-subtle" aria-hidden />
           Resolved (blocker done)
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0 w-5 border-t border-dotted border-fg-subtle opacity-60" aria-hidden />
-          Switched off
-        </span>
         <span className="ml-auto tabular text-fg-subtle">
           {edges.length} dependencies · {blocking} blocking
         </span>

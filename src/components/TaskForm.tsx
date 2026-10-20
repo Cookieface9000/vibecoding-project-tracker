@@ -250,11 +250,11 @@ export default function TaskForm({
           </div>
         </div>
 
-        {/* Blocked by: tasks that must finish first. Cycles are rejected on save. */}
+        {/* Blockers: tasks that must finish first. Cycles are rejected on save. */}
         {otherTasks.length > 0 && (
           <fieldset>
             <legend className={labelCls}>
-              Blocked by <span className="font-normal text-fg-subtle">(optional)</span>
+              Blockers <span className="font-normal text-fg-subtle">(optional)</span>
             </legend>
             <ul className="mt-1.5 max-h-40 divide-y divide-line overflow-y-auto border border-line-strong">
               {otherTasks.map((t) => {

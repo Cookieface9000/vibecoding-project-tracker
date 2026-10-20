@@ -263,19 +263,6 @@ export async function createBlockerTask(taskId: string, projectId: string, rawTi
   });
 }
 
-/** Switch a blocker on (blocks) or off (kept for reference, doesn't block). */
-export async function setBlockerActive(taskId: string, projectId: string, blockerId: string, active: boolean): Promise<ActionResult> {
-  return run(projectId, async () => {
-    if (!UUID.test(taskId) || !UUID.test(blockerId)) throw new InvalidInput('Invalid blocker.');
-    await assertValidBlockers(supabase(), projectId, taskId, []); // task must be in this project
-    return supabase()
-      .from('task_dependencies')
-      .update({ active: Boolean(active) })
-      .eq('task_id', taskId)
-      .eq('depends_on', blockerId);
-  });
-}
-
 export async function removeBlocker(taskId: string, projectId: string, blockerId: string): Promise<ActionResult> {
   return run(projectId, async () => {
     if (!UUID.test(taskId) || !UUID.test(blockerId)) throw new InvalidInput('Invalid blocker.');
@@ -370,6 +357,14 @@ export async function deleteTask(id: string, projectId: string): Promise<ActionR
   return run(projectId, async () => {
     if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
     return supabase().from('tasks').delete().eq('id', id).eq('project_id', projectId);
+  });
+}
+
+/** Clear the board: removes every task in the project (prompts, history and links cascade). */
+export async function deleteAllTasks(projectId: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(projectId)) throw new InvalidInput('Invalid project.');
+    return supabase().from('tasks').delete().eq('project_id', projectId);
   });
 }
 

@@ -11,7 +11,8 @@ import { HealthEdge } from './HealthMeter';
 import { DUE_STYLE, LABEL_STYLE, TYPE_STYLE, initials } from './task-style';
 
 // Compact, fixed-height ticket: title (max 2 lines) + one meta row + a health bar on the bottom edge.
-// Colour coding = whole-card tint by due urgency; type by icon; label by chip; lock = blocked.
+// Colour coding = whole-card tint by due urgency; type by icon; label by chip.
+// Blocked = red outline + "Blocked" badge, so it reads from across the board.
 export function TaskCardBody({
   task,
   label,
@@ -40,7 +41,7 @@ export function TaskCardBody({
     <div
       className={`relative flex h-[84px] w-full flex-col justify-between overflow-hidden rounded-lg border px-3 pb-3 pt-2.5 text-left transition-[background-color,border-color] duration-500 ${due.card} ${
         lifted ? 'shadow-lift ring-1 ring-line-strong' : 'group-hover:border-line-strong'
-      } ${settle ? 'motion-safe:animate-settle' : ''}`}
+      } ${blocked ? '!border-due-overdue ring-1 ring-inset ring-due-overdue' : ''} ${settle ? 'motion-safe:animate-settle' : ''}`}
     >
       <span className="flex items-start justify-between gap-2">
         <span
@@ -50,8 +51,9 @@ export function TaskCardBody({
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {blocked && (
-            <span className="inline-flex items-center text-ink-overdue" title="Blocked by an unfinished task">
-              <Lock className="h-3.5 w-3.5" aria-hidden />
+            <span className="inline-flex h-5 items-center gap-1 rounded border border-due-overdue bg-due-overdue/10 px-1.5 text-[11px] font-semibold text-ink-overdue" title="Blocked: a blocker isn't done yet">
+              <Lock className="h-3 w-3" aria-hidden />
+              Blocked
             </span>
           )}
           {withContext && (

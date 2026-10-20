@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, CheckCircle2, Circle, Gauge, GitBranch, History, Lock, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Circle, Gauge, GitBranch, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
 import { HEALTH_LABEL, contextHealth, healthBand } from '@/lib/health';
 import { isBlocked } from '@/lib/blocking';
 import BlockerManager, { type BlockerControls } from './BlockerManager';
@@ -66,7 +66,6 @@ export default function TaskDetails({
   const byId = new Map(allTasks.map((t) => [t.id, t]));
   const blockers = task.blockers.filter((b) => byId.has(b.taskId));
   const blocked = isBlocked(task, byId);
-  const blocks = allTasks.filter((t) => t.dependsOn.includes(task.id));
 
   return (
     <>
@@ -171,14 +170,11 @@ export default function TaskDetails({
         </Section>
 
         <Section
-          title="Dependencies"
+          title="Blockers"
           icon={GitBranch}
-          aside={blocked ? 'Blocked' : blockers.length ? 'Not blocked' : undefined}
+          aside={blocked ? 'Blocked' : blockers.length ? 'Not blocked' : 'None'}
         >
           <BlockerManager task={task} allTasks={allTasks} onOpenTask={onOpenTask} controls={blockerControls} />
-          <div className="mt-5">
-            <DependencyList title="Blocks" tasks={blocks} onOpenTask={onOpenTask} empty="Nothing waits on this task." />
-          </div>
         </Section>
 
         {task.description && (
@@ -293,46 +289,5 @@ function Empty({ children }: { children: React.ReactNode }) {
     <p className="rounded-lg border border-dashed border-line-strong px-3 py-4 text-center text-xs text-fg-subtle">
       {children}
     </p>
-  );
-}
-
-function DependencyList({
-  title,
-  tasks,
-  empty,
-  onOpenTask,
-}: {
-  title: string;
-  tasks: BoardTask[];
-  empty: string;
-  onOpenTask: (id: string) => void;
-}) {
-  return (
-    <div>
-      <p className="mb-1.5 text-[12px] font-medium text-fg-muted">{title}</p>
-      {tasks.length === 0 ? (
-        <p className="text-[13px] text-fg-subtle">{empty}</p>
-      ) : (
-        <ul className="space-y-1">
-          {tasks.map((t) => {
-            const open = t.status !== 'done';
-            return (
-              <li key={t.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenTask(t.id)}
-                  className="flex w-full items-center gap-2 border border-line px-2 py-1.5 text-left text-[13px] hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${STAGE_DOT[t.status]}`} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-fg">{t.title}</span>
-                  {title === 'Blocked by' && open && <Lock className="h-3.5 w-3.5 shrink-0 text-ink-overdue" aria-label="Still blocking" />}
-                  <span className="shrink-0 text-[11px] text-fg-subtle">{STAGES.find((s) => s.id === t.status)?.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
   );
 }

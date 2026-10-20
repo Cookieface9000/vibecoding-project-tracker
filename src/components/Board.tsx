@@ -15,12 +15,13 @@ import {
   type DragStartEvent,
   type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { addBlocker, createBlockerTask, handOffTask, moveTask, removeBlocker, setBlockerActive, type ActionResult } from '@/app/actions';
+import { addBlocker, createBlockerTask, deleteAllTasks, handOffTask, moveTask, removeBlocker, type ActionResult } from '@/app/actions';
 import { isBlocked } from '@/lib/blocking';
 import { STAGES, type BoardTask, type Label, type Member, type Status } from '@/lib/types';
 import EditPicker from './EditPicker';
+import ClearBoardDialog from './ClearBoardDialog';
 import Modal, { btn } from './Modal';
 import TaskCard, { TaskCardBody } from './TaskCard';
 import TaskDetails from './TaskDetails';
@@ -49,6 +50,7 @@ type ModalState =
   | { kind: 'edit'; id: string; from: 'view' | 'pick' }
   | { kind: 'create'; status: Status }
   | { kind: 'pick' }
+  | { kind: 'clear' }
   | null;
 
 const stageLabel = (id: unknown) => STAGES.find((s) => s.id === id)?.label ?? 'column';
@@ -110,7 +112,7 @@ export default function Board({
     return new Set(tasks.filter((t) => isBlocked(t, byId)).map((t) => t.id));
   }, [tasks]);
 
-  // Blockers managed from inside a task. Toggle/remove update instantly and roll back on
+  // Blockers managed from inside a task. Remove updates instantly and roll back on
   // failure; add/create wait for the server (which refreshes the board).
   const [blockerBusy, setBlockerBusy] = useState(false);
   function blockerAction(optimistic: ((ts: BoardTask[]) => BoardTask[]) | null, call: () => Promise<ActionResult>, okText: string) {
@@ -133,12 +135,6 @@ export default function Board({
     onAdd: (blockerId: string) => blockerAction(null, () => addBlocker(task.id, projectId, blockerId), 'Blocker added.'),
     onCreate: (title: string) =>
       blockerAction(null, () => createBlockerTask(task.id, projectId, title), `Created “${title.trim()}” as a blocker.`),
-    onToggle: (blockerId: string, active: boolean) =>
-      blockerAction(
-        (ts) => ts.map((t) => (t.id === task.id ? { ...t, blockers: t.blockers.map((b) => (b.taskId === blockerId ? { ...b, active } : b)) } : t)),
-        () => setBlockerActive(task.id, projectId, blockerId, active),
-        active ? 'Blocker is active.' : 'Blocker switched off: it no longer blocks.',
-      ),
     onRemove: (blockerId: string) =>
       blockerAction(
         (ts) =>
@@ -151,6 +147,24 @@ export default function Board({
         'Blocker removed.',
       ),
   });
+
+  /** "Delete all": empty the board straight away, restore it if the server refuses. */
+  const [clearing, setClearing] = useState(false);
+  function clearBoard() {
+    const before = tasks;
+    setClearing(true);
+    startTransition(async () => {
+      const result = await deleteAllTasks(projectId);
+      setClearing(false);
+      if (result.ok) {
+        setTasks([]);
+        setModal(null);
+        setToast({ kind: 'ok', text: `Deleted ${before.length} task${before.length === 1 ? '' : 's'}.`, id: Date.now() });
+      } else {
+        setToast({ kind: 'error', text: result.error, id: Date.now() });
+      }
+    });
+  }
 
   /** "Hand off to…": reassign straight away, confirm with a toast, roll back on failure. */
   function handOff(task: BoardTask, assignee: string) {
@@ -250,6 +264,10 @@ export default function Board({
           <button type="button" onClick={() => setModal({ kind: 'pick' })} className={btn.secondary} disabled={tasks.length === 0}>
             <Pencil className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
             Edit task
+          </button>
+          <button type="button" onClick={() => setModal({ kind: 'clear' })} className={btn.danger} disabled={tasks.length === 0}>
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            Delete all
           </button>
         </div>
 
@@ -370,6 +388,12 @@ export default function Board({
             onDone={close}
             onCancel={() => setModal(modal.from === 'pick' ? { kind: 'pick' } : { kind: 'view', id: modalTask.id })}
           />
+        </Modal>
+      )}
+
+      {modal?.kind === 'clear' && (
+        <Modal labelledBy="clear-board" onClose={close}>
+          <ClearBoardDialog projectName={project.name} projectCode={projectCode} count={tasks.length} busy={clearing} onConfirm={clearBoard} onCancel={close} />
         </Modal>
       )}
 
