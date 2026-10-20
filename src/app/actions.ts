@@ -49,7 +49,7 @@ export async function updateTask(id: string, input: TaskInput) {
   const row = validate(input);
   const db = supabase();
 
-  // M9: bump contextUpdatedAt only when the context text actually changed.
+  // Bump contextUpdatedAt only when the context text actually changed.
   const { data: current, error: readError } = await db.from('tasks').select('context').eq('id', id).single();
   if (readError) throw new Error(`Failed to load task: ${readError.message}`);
   const contextChanged = current.context !== row.context;

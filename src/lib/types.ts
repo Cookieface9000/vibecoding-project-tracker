@@ -11,7 +11,8 @@ export const STAGES = [
 
 export type Status = (typeof STAGES)[number]['id'];
 
-// Solo project: one human assignee. These are the only valid values for `Task.assignee`.
+// Valid values for `Task.assignee`. Placeholder until the `members` table (PRD FR-14) replaces it;
+// a personal board has one member, a team board several.
 export const TEAM = ['Me'] as const;
 
 export const TASK_TYPES = ['feature', 'bug'] as const;
@@ -29,7 +30,7 @@ export interface Task {
   assignee: string;
   dueDate: string | null; // ISO 'YYYY-MM-DD'
   createdDate: string; // ISO 'YYYY-MM-DD'
-  // M9
+  // AI context
   context: string;
   contextTool: ContextTool | null;
   contextUpdatedAt: string | null; // ISO timestamp

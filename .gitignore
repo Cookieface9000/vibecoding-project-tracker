@@ -10,7 +10,7 @@ dist
 
 # Local-only: screenshots + prototype spec (never commit)
 ss/
-PROTOTYPE.md
+context_helper.md
 
 # Next.js
 .next/

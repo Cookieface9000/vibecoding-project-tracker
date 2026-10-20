@@ -7,8 +7,5 @@ html, body {
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: #f8fafc; /* slate-50 */
-  color: #0f172a;            /* slate-900 */
+  @apply bg-surface-page font-sans text-slate-900 antialiased dark:bg-surface-page-dark dark:text-slate-200;
 }

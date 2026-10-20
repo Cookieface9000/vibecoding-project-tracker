@@ -1,4 +1,4 @@
--- Mock tasks so the board isn't empty on first load (M4).
+-- Demo tasks so the board isn't empty on first load.
 -- Run after schema.sql: Dashboard → SQL Editor → paste → Run.
 
 insert into public.tasks (title, description, type, status, assignee, due_date) values
