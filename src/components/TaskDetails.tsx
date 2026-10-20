@@ -1,9 +1,9 @@
 'use client';
 
-import { CalendarDays, History, MessageSquareText, User, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CalendarDays, History, MessageSquareText, Pencil, User } from 'lucide-react';
 import { dueLabel, dueState } from '@/lib/due';
 import { STAGES, type BoardTask } from '@/lib/types';
+import { ModalHeader, btn } from './Modal';
 import { DUE_STYLE, STAGE_DOT, TYPE_STYLE, initials } from './task-style';
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -24,51 +24,18 @@ function timeAgo(iso: string) {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-// The card is the trigger; the details modal only renders while open.
-export default function TaskDialog({
+// Read-only ticket view shown when a card is clicked.
+export default function TaskDetails({
   task,
   projectCode,
-  children,
+  onEdit,
+  onClose,
 }: {
   task: BoardTask;
   projectCode: string;
-  children: React.ReactNode;
+  onEdit: () => void;
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (open && dialog && !dialog.open) dialog.showModal();
-  }, [open]);
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="group block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-        aria-haspopup="dialog"
-      >
-        {children}
-      </button>
-
-      {open && (
-        <dialog
-          ref={dialogRef}
-          onClose={() => setOpen(false)}
-          onClick={(e) => e.target === e.currentTarget && dialogRef.current?.close()}
-          aria-labelledby={`task-title-${task.id}`}
-          className="m-auto w-[min(42rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-surface-card p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/50 backdrop:backdrop-blur-sm dark:border-slate-700 dark:bg-surface-card-dark dark:text-slate-100"
-        >
-          <TaskDetails task={task} projectCode={projectCode} onClose={() => dialogRef.current?.close()} />
-        </dialog>
-      )}
-    </>
-  );
-}
-
-function TaskDetails({ task, projectCode, onClose }: { task: BoardTask; projectCode: string; onClose: () => void }) {
   const type = TYPE_STYLE[task.type];
   const state = dueState(task);
   const due = DUE_STYLE[state];
@@ -76,30 +43,22 @@ function TaskDetails({ task, projectCode, onClose }: { task: BoardTask; projectC
   const stage = STAGES.find((s) => s.id === task.status);
 
   return (
-    <div className="flex max-h-[85vh] flex-col">
-      {/* Header */}
-      <div className={`flex items-start justify-between gap-4 border-b border-l-4 border-b-slate-200 px-6 py-4 dark:border-b-slate-700 ${type.stripe}`}>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs">
+    <>
+      <ModalHeader
+        id={`task-title-${task.id}`}
+        accent={type.stripe}
+        eyebrow={
+          <>
             <span className="font-mono text-slate-500 dark:text-slate-400">#{projectCode}</span>
             <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-medium uppercase tracking-wide ${type.chip}`}>
               <type.Icon className="h-3 w-3" aria-hidden />
               {type.label}
             </span>
-          </div>
-          <h2 id={`task-title-${task.id}`} className="mt-1.5 font-heading text-xl font-medium leading-snug">
-            {task.title}
-          </h2>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="-mr-2 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
+          </>
+        }
+        title={task.title}
+        onClose={onClose}
+      />
 
       <div className="space-y-6 overflow-y-auto px-6 py-5">
         {/* Key facts: fixed 2×2 grid so every modal lines up the same way */}
@@ -189,7 +148,17 @@ function TaskDetails({ task, projectCode, onClose }: { task: BoardTask; projectC
           )}
         </Section>
       </div>
-    </div>
+
+      <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+        <button type="button" onClick={onClose} className={btn.secondary}>
+          Close
+        </button>
+        <button type="button" onClick={onEdit} className={btn.primary}>
+          <Pencil className="h-4 w-4" aria-hidden />
+          Edit
+        </button>
+      </div>
+    </>
   );
 }
 

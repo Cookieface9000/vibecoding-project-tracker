@@ -43,7 +43,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     <AppShell activeProjectId={project.id}>
       <ProjectHeader project={project} />
       <main className="flex-1 p-6">
-        <Board tasks={tasks} projectCode={project.code} />
+        <Board tasks={tasks} projectId={project.id} projectCode={project.code} />
       </main>
     </AppShell>
   );

@@ -11,6 +11,7 @@ import {
   TASK_TYPES,
   TEAM,
   type DeliverableKind,
+  type Status,
   type TaskInput,
 } from '@/lib/types';
 
@@ -60,21 +61,32 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
 }
 
 // ── Tasks ───────────────────────────────────────────────────────────────────
+// Return a result instead of throwing: thrown messages are hidden in production.
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+class InvalidInput extends Error {}
+
+function isStatus(value: unknown): value is Status {
+  return STAGES.some((s) => s.id === value);
+}
 
 function validate(input: TaskInput) {
   const title = input.title?.trim();
-  if (!title) throw new Error('Title is required');
-  if (!UUID.test(input.projectId)) throw new Error('Invalid project');
-  if (!TASK_TYPES.includes(input.type)) throw new Error('Invalid type');
-  if (!STAGES.some((s) => s.id === input.status)) throw new Error('Invalid status');
-  if (!(TEAM as readonly string[]).includes(input.assignee)) throw new Error('Invalid assignee');
-  if (input.contextTool && !CONTEXT_TOOLS.includes(input.contextTool)) throw new Error('Invalid AI tool');
-  if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) throw new Error('Invalid due date');
+  if (!title) throw new InvalidInput('Give the task a title.');
+  if (title.length > 200) throw new InvalidInput('Title must be 200 characters or fewer.');
+  if ((input.description ?? '').length > 5000) throw new InvalidInput('Description must be 5000 characters or fewer.');
+  if (!UUID.test(input.projectId)) throw new InvalidInput('Invalid project.');
+  if (!TASK_TYPES.includes(input.type)) throw new InvalidInput('Choose Feature or Bug.');
+  if (!isStatus(input.status)) throw new InvalidInput('Choose a valid status.');
+  if (!(TEAM as readonly string[]).includes(input.assignee)) throw new InvalidInput('Choose a valid assignee.');
+  if (input.contextTool && !CONTEXT_TOOLS.includes(input.contextTool)) throw new InvalidInput('Choose a valid AI tool.');
+  if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) throw new InvalidInput('Enter a valid due date.');
 
   return {
     project_id: input.projectId,
     title,
-    description: input.description ?? '',
+    description: input.description?.trim() ?? '',
     type: input.type,
     status: input.status,
     assignee: input.assignee,
@@ -84,36 +96,66 @@ function validate(input: TaskInput) {
   };
 }
 
-export async function createTask(input: TaskInput) {
-  const row = validate(input);
-  const { error } = await supabase()
-    .from('tasks')
-    .insert({ ...row, context_updated_at: row.context ? new Date().toISOString() : null });
-  if (error) throw new Error(`Failed to create task: ${error.message}`);
-  revalidatePath(`/projects/${row.project_id}`);
-}
-
-export async function updateTask(id: string, input: TaskInput) {
-  const row = validate(input);
-  const db = supabase();
-
-  // Bump contextUpdatedAt only when the context text actually changed.
-  const { data: current, error: readError } = await db.from('tasks').select('context').eq('id', id).single();
-  if (readError) throw new Error(`Failed to load task: ${readError.message}`);
-  const contextChanged = current.context !== row.context;
-
-  const { error } = await db
-    .from('tasks')
-    .update(contextChanged ? { ...row, context_updated_at: new Date().toISOString() } : row)
-    .eq('id', id);
-  if (error) throw new Error(`Failed to update task: ${error.message}`);
-  revalidatePath(`/projects/${row.project_id}`);
-}
-
-export async function deleteTask(id: string, projectId: string) {
-  const { error } = await supabase().from('tasks').delete().eq('id', id);
-  if (error) throw new Error(`Failed to delete task: ${error.message}`);
+async function run(projectId: string, work: () => Promise<{ error: { message: string } | null }>): Promise<ActionResult> {
+  try {
+    const { error } = await work();
+    if (error) return { ok: false, error: `Couldn't save: ${error.message}` };
+  } catch (err) {
+    if (err instanceof InvalidInput) return { ok: false, error: err.message };
+    return { ok: false, error: 'Something went wrong. Please try again.' };
+  }
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath('/');
+  return { ok: true };
+}
+
+export async function createTask(input: TaskInput): Promise<ActionResult> {
+  return run(input.projectId, async () => {
+    const row = validate(input);
+    return supabase()
+      .from('tasks')
+      .insert({ ...row, context_updated_at: row.context ? new Date().toISOString() : null });
+  });
+}
+
+export async function updateTask(id: string, input: TaskInput): Promise<ActionResult> {
+  return run(input.projectId, async () => {
+    if (!UUID.test(id)) throw new InvalidInput('Invalid task.');
+    const row = validate(input);
+    const db = supabase();
+
+    // Bump contextUpdatedAt only when the context text actually changed.
+    const { data: current, error: readError } = await db
+      .from('tasks')
+      .select('context')
+      .eq('id', id)
+      .eq('project_id', row.project_id)
+      .single();
+    if (readError) return { error: readError };
+    const contextChanged = current.context !== row.context;
+
+    return db
+      .from('tasks')
+      .update(contextChanged ? { ...row, context_updated_at: new Date().toISOString() } : row)
+      .eq('id', id)
+      .eq('project_id', row.project_id);
+  });
+}
+
+/** Drag-and-drop: change only the status. */
+export async function moveTask(id: string, projectId: string, status: Status): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
+    if (!isStatus(status)) throw new InvalidInput('Choose a valid status.');
+    return supabase().from('tasks').update({ status }).eq('id', id).eq('project_id', projectId);
+  });
+}
+
+export async function deleteTask(id: string, projectId: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
+    return supabase().from('tasks').delete().eq('id', id).eq('project_id', projectId);
+  });
 }
 
 // ── Pinned links ────────────────────────────────────────────────────────────
