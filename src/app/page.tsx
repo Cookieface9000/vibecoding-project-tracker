@@ -27,13 +27,13 @@ const STAGE_STYLE: Record<Status, { Icon: LucideIcon; icon: string; bar: string;
     Icon: Eye,
     icon: 'text-stage-review',
     bar: 'bg-stage-review',
-    count: 'bg-stage-review/15 text-purple-700 dark:text-purple-300',
+    count: 'bg-stage-review/15 text-violet-700 dark:text-violet-300',
   },
   done: {
     Icon: CheckCircle2,
     icon: 'text-stage-done',
     bar: 'bg-stage-done',
-    count: 'bg-stage-done/15 text-emerald-700 dark:text-emerald-300',
+    count: 'bg-stage-done/15 text-green-700 dark:text-green-300',
   },
 };
 

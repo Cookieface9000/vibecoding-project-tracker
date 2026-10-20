@@ -14,15 +14,15 @@ export const TYPE_STYLE = {
     label: 'Bug',
     Icon: Bug,
     stripe: 'border-l-bug',
-    chip: 'bg-bug/10 text-bug ring-bug/30 dark:bg-bug/20 dark:text-rose-300',
+    chip: 'bg-bug/10 text-bug ring-bug/30 dark:bg-bug/20 dark:text-red-300',
   },
 } as const;
 
 // Due-date urgency: card background + due chip per urgency state.
 const DUE_STYLE: Record<DueState, { card: string; chip: string; Icon: typeof Clock }> = {
   safe: {
-    card: 'bg-sky-50/70 ring-due-safe/25 dark:bg-due-safe/[0.07] dark:ring-due-safe/30',
-    chip: 'bg-due-safe/10 text-sky-700 dark:bg-due-safe/20 dark:text-sky-300',
+    card: 'bg-green-50/70 ring-due-safe/25 dark:bg-due-safe/[0.07] dark:ring-due-safe/30',
+    chip: 'bg-due-safe/10 text-green-700 dark:bg-due-safe/20 dark:text-green-300',
     Icon: CalendarClock,
   },
   warning: {
@@ -106,11 +106,14 @@ export default function TaskCard({ task }: { task: Task }) {
           <MessageSquareText className={`h-3.5 w-3.5 ${task.context ? 'text-brand dark:text-brand-dark' : ''}`} aria-hidden />
           {task.context ? 'Context' : 'No context'}
         </span>
-        <span
-          className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/15 text-[10px] font-bold text-brand ring-2 ring-white dark:bg-brand-dark/20 dark:text-brand-dark dark:ring-surface-card-dark"
-          title={`Assigned to ${task.assignee}`}
-        >
-          {initials(task.assignee)}
+        <span className="flex items-center gap-1.5" title={`Assigned to ${task.assignee}`}>
+          <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">{task.assignee}</span>
+          <span
+            className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/15 text-[10px] font-bold text-brand ring-2 ring-white dark:bg-brand-dark/20 dark:text-brand-dark dark:ring-surface-card-dark"
+            aria-hidden
+          >
+            {initials(task.assignee)}
+          </span>
         </span>
       </div>
     </article>
