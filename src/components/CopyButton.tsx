@@ -40,9 +40,9 @@ export default function CopyButton({
     <button
       type="button"
       onClick={copy}
-      className={`inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-fg-muted shadow-sm hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${className}`}
     >
-      {state === 'copied' ? <Check className="h-3.5 w-3.5 text-brand dark:text-brand-dark" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+      {state === 'copied' ? <Check className="h-3.5 w-3.5 text-brand-ink" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
       <span aria-live="polite">{state === 'copied' ? 'Copied — paste it into your AI' : state === 'failed' ? 'Copy failed' : label}</span>
     </button>
   );

@@ -4,14 +4,17 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { createProject, type ProjectFormState } from '@/app/actions';
 import { deriveProjectCode, normaliseProjectCode } from '@/lib/project-code';
+import type { Team } from '@/lib/types';
+import { btn, field, fieldHint, fieldLabel } from './Modal';
 
-const input =
-  'mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-brand-dark';
-const label = 'block text-sm font-medium text-slate-700 dark:text-slate-200';
-const hint = 'mt-1 text-xs text-slate-500 dark:text-slate-400';
+const input = field;
+const label = fieldLabel;
+const hint = fieldHint;
 
-export default function NewProjectForm() {
+export default function NewProjectForm({ teams, defaultTeamId = '' }: { teams: Team[]; defaultTeamId?: string }) {
   const [state, formAction, pending] = useActionState<ProjectFormState, FormData>(createProject, {});
+  const [teamId, setTeamId] = useState(state.fields?.teamId ?? defaultTeamId);
+  const selectedTeam = teams.find((t) => t.id === teamId);
   const [name, setName] = useState(state.fields?.name ?? '');
   // The code follows the name until the user edits it themselves.
   const [code, setCode] = useState(state.fields?.code ?? '');
@@ -23,7 +26,7 @@ export default function NewProjectForm() {
   return (
     <form
       action={formAction}
-      className="max-w-xl space-y-5 rounded-xl border border-slate-200 bg-surface-card p-6 shadow-sm dark:border-slate-800 dark:bg-surface-card-dark"
+      className="space-y-5 rounded-xl border border-line bg-surface p-6 shadow-card"
     >
       {state.error && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
@@ -53,7 +56,7 @@ export default function NewProjectForm() {
             Code
           </label>
           <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 mt-[3px] -translate-y-1/2 font-mono text-sm text-slate-400">#</span>
+            <span className="pointer-events-none absolute left-3 top-1/2 mt-[3px] -translate-y-1/2 font-mono text-[13px] text-fg-subtle">#</span>
             <input
               id="code"
               name="code"
@@ -72,6 +75,35 @@ export default function NewProjectForm() {
             2–6 letters
           </p>
         </div>
+      </div>
+
+      {/* Team: decides who else can see and work in this project. */}
+      <div>
+        <label htmlFor="teamId" className={label}>
+          Team
+        </label>
+        <select
+          id="teamId"
+          name="teamId"
+          value={teamId}
+          onChange={(e) => setTeamId(e.target.value)}
+          aria-describedby="team-hint"
+          className={input}
+        >
+          <option value="">Personal (only you)</option>
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} ({t.code}) · {t.memberCount} {t.memberCount === 1 ? 'member' : 'members'}
+            </option>
+          ))}
+        </select>
+        <p id="team-hint" className={hint}>
+          {selectedTeam
+            ? `Everyone in ${selectedTeam.name} can see and work in this project.`
+            : teams.length
+              ? 'Only you will see this project. Pick a team to share it.'
+              : 'Only you will see this project. Join or create a team in Settings to share projects.'}
+        </p>
       </div>
 
       <div>
@@ -105,17 +137,17 @@ export default function NewProjectForm() {
         />
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-5 dark:border-slate-800">
+      <div className="flex items-center justify-end gap-2 border-t border-line pt-5">
         <Link
           href="/"
-          className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          className={btn.secondary}
         >
           Cancel
         </Link>
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-60"
+          className={btn.primary}
         >
           {pending ? 'Creating…' : 'Create project'}
         </button>

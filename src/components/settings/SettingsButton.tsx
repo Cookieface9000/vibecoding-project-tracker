@@ -12,11 +12,11 @@ export default function SettingsButton() {
       type="button"
       onClick={() => openSettings()}
       aria-keyshortcuts={shortcuts.openSettings}
-      className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-[15px] text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300"
+      className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] font-medium text-sidebar-fg-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
     >
-      <Settings className="h-[18px] w-[18px] text-slate-500" aria-hidden />
+      <Settings className="h-4 w-4" aria-hidden />
       Settings
-      <kbd className="ml-auto rounded border border-white/10 px-1.5 font-mono text-[11px] text-slate-500">
+      <kbd className="ml-auto rounded border border-sidebar-line px-1.5 font-mono text-[10px] text-sidebar-fg-muted">
         {comboKeys(shortcuts.openSettings).join('+')}
       </kbd>
     </button>

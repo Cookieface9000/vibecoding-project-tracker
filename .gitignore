@@ -23,3 +23,6 @@ out/
 
 # MCP config (contains Supabase project ref)
 .mcp.json
+
+# Third-party Claude skill (installed locally, not part of the app)
+.claude/skills/ui-ux-pro-max/

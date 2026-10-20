@@ -47,6 +47,36 @@ export interface Project {
   client: string;
   description: string;
   status: ProjectStatus;
+  teamId: string | null; // null = personal project
+  teamName: string | null;
+  createdBy: string | null; // member name
+  isMine: boolean; // created by the current user
+}
+
+/** A team the current user belongs to. */
+export interface Team {
+  id: string;
+  name: string;
+  code: string; // VT-XXXX, shared to let others join
+  description: string;
+  role: 'owner' | 'member';
+  memberCount: number;
+  ownerName: string | null; // who owns the team (for "Jordan Lee's team")
+}
+
+/** Projects as shown under "Projects": team projects split into yours / others, plus personal. */
+export interface ProjectGroups<P extends Project = Project> {
+  teamYours: P[];
+  teamOthers: P[];
+  personal: P[];
+}
+
+export function groupProjects<P extends Project>(projects: P[]): ProjectGroups<P> {
+  return {
+    teamYours: projects.filter((p) => p.teamId && p.isMine),
+    teamOthers: projects.filter((p) => p.teamId && !p.isMine),
+    personal: projects.filter((p) => !p.teamId),
+  };
 }
 
 export interface Task {
@@ -77,9 +107,22 @@ export interface PromptEntry {
   createdAt: string; // ISO timestamp
 }
 
-/** A task as shown on a board: includes its prompt history, newest first. */
+/** A task as shown on a board: includes its prompt history (newest first) and blockers. */
 export interface BoardTask extends Task {
   prompts: PromptEntry[];
+  dependsOn: string[]; // ids of tasks this one is blocked by (active or not)
+  blockers: { taskId: string; active: boolean }[]; // same links, with their "active" switch
+}
+
+/** Something that happened to a task (feeds the handoff map). */
+export interface TaskEvent {
+  id: string;
+  taskId: string;
+  kind: 'created' | 'moved' | 'handoff';
+  from: string | null;
+  to: string | null;
+  actor: string;
+  at: string; // ISO timestamp
 }
 
 export const DELIVERABLES = ['presentation', 'demo', 'report', 'documentation'] as const;

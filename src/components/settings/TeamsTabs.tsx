@@ -1,89 +1,100 @@
 'use client';
 
-import { CheckCircle2, Users } from 'lucide-react';
-import { useState } from 'react';
+import { Crown, Users } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, useTransition } from 'react';
+import { createTeam, getMyTeams, joinTeam } from '@/app/actions';
+import type { Team } from '@/lib/types';
 import CopyButton from '../CopyButton';
 import { btn } from '../Modal';
-import { PanelTitle, PlaceholderNote, settingsField, settingsLabel } from './ui';
+import { PanelTitle, settingsField, settingsLabel } from './ui';
 
-export interface Team {
-  name: string;
-  code: string;
-  members: number;
-  current?: boolean;
+type Message = { kind: 'ok' | 'error'; text: string } | null;
+
+function StatusMessage({ id, message }: { id: string; message: Message }) {
+  if (!message) return null;
+  return (
+    <p
+      id={id}
+      role={message.kind === 'error' ? 'alert' : 'status'}
+      className={`mt-2 text-[13px] ${message.kind === 'error' ? 'text-red-700 dark:text-red-300' : 'text-brand-ink'}`}
+    >
+      {message.text}
+    </p>
+  );
 }
 
-const CODE_FORMAT = /^VT-[A-Z0-9]{4}$/;
-
-function randomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return 'VT-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
-// Placeholder: teams live only in this modal's memory until accounts exist.
-export function TeamsTab({ teams, setTeams }: { teams: Team[]; setTeams: React.Dispatch<React.SetStateAction<Team[]>> }) {
+// Your teams (from the database) and joining one by code.
+export function TeamsTab() {
+  const router = useRouter();
+  const [teams, setTeams] = useState<Team[] | null>(null);
   const [code, setCode] = useState('');
-  const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<Message>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    getMyTeams().then((r) => (r.ok ? setTeams(r.teams) : setMessage({ kind: 'error', text: r.error })));
+  }, []);
 
   function join(e: React.FormEvent) {
     e.preventDefault();
-    const normalised = code.trim().toUpperCase();
-    if (!CODE_FORMAT.test(normalised)) {
-      setMessage({ kind: 'error', text: 'Team codes look like VT-AB12.' });
-      return;
-    }
-    if (teams.some((t) => t.code === normalised)) {
-      setMessage({ kind: 'error', text: `You're already in ${normalised}.` });
-      return;
-    }
-    setTeams((current) => [...current, { name: `Team ${normalised}`, code: normalised, members: 3 }]);
-    setMessage({ kind: 'ok', text: `Joined ${normalised} (placeholder).` });
-    setCode('');
-  }
-
-  function switchTo(teamCode: string) {
-    setTeams((current) => current.map((t) => ({ ...t, current: t.code === teamCode })));
+    startTransition(async () => {
+      const r = await joinTeam(code);
+      if (r.ok) {
+        setTeams(r.teams);
+        setCode('');
+        setMessage({ kind: 'ok', text: r.message ?? 'Joined.' });
+        router.refresh(); // the team's projects appear in the sidebar and project list
+      } else {
+        setMessage({ kind: 'error', text: r.error });
+      }
+    });
   }
 
   return (
     <div>
-      <PanelTitle title="Teams" description="The team you're working in, and any others you've joined." />
-      <PlaceholderNote>Placeholder: joining and switching only lasts until you close Settings.</PlaceholderNote>
+      <PanelTitle title="Teams" description="Projects in your teams appear under Team projects for everyone in the team." />
 
-      <ul className="mb-8 space-y-2">
-        {teams.map((team) => (
-          <li
-            key={team.code}
-            className={`flex items-center gap-3 rounded-lg border p-3 ${
-              team.current ? 'border-brand/50 bg-brand/5 dark:border-brand-dark/50 dark:bg-brand-dark/10' : 'border-slate-200 dark:border-slate-700'
-            }`}
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              <Users className="h-4 w-4" aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-slate-900 dark:text-white">{team.name}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-mono">{team.code}</span> · {team.members} members
-              </p>
-            </div>
-            {team.current ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-brand dark:text-brand-dark">
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                Current team
+      {teams === null ? (
+        <p className="mb-8 text-[13px] text-fg-subtle">Loading your teams…</p>
+      ) : teams.length === 0 ? (
+        <p className="mb-8 border border-dashed border-line-strong px-3 py-4 text-center text-[13px] text-fg-subtle">
+          You&apos;re not in any teams yet. Join one below or create one.
+        </p>
+      ) : (
+        <ul className="mb-8 divide-y divide-line border border-line">
+          {teams.map((team) => (
+            <li key={team.id} className="flex items-center gap-3 p-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted text-fg-muted">
+                <Users className="h-4 w-4" aria-hidden />
               </span>
-            ) : (
-              <button type="button" onClick={() => switchTo(team.code)} className={btn.secondary}>
-                Switch
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg">
+                  {team.name}
+                  {team.role === 'owner' && (
+                    <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-fg-subtle" title="You own this team">
+                      <Crown className="h-3 w-3" aria-hidden />
+                      Owner
+                    </span>
+                  )}
+                </p>
+                <p className="text-[12px] text-fg-subtle">
+                  <span className="font-mono">{team.code}</span> · {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
+                </p>
+              </div>
+              <CopyButton getText={() => team.code} label="Copy code" />
+              <Link href={`/projects/new?team=${team.id}`} className={btn.secondary}>
+                New project
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
-      <form onSubmit={join} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-        <h4 className="font-medium text-slate-900 dark:text-white">Join a team</h4>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Ask a teammate for their team code.</p>
+      <form onSubmit={join} className="border border-line p-4">
+        <h4 className="text-[14px] font-semibold text-fg">Join a team</h4>
+        <p className="mt-1 text-[13px] text-fg-subtle">Ask a teammate for their team code (e.g. VT-PLAT).</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="w-48">
             <label htmlFor="team-code" className={settingsLabel}>
@@ -92,63 +103,62 @@ export function TeamsTab({ teams, setTeams }: { teams: Team[]; setTeams: React.D
             <input
               id="team-code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setMessage(null);
+              }}
               placeholder="VT-AB12"
               maxLength={7}
               className={`${settingsField} font-mono uppercase`}
               aria-describedby={message ? 'team-code-msg' : undefined}
             />
           </div>
-          <button type="submit" className={btn.primary}>
-            Join team
+          <button type="submit" disabled={pending || !code.trim()} className={btn.primary}>
+            {pending ? 'Joining…' : 'Join team'}
           </button>
         </div>
-        {message && (
-          <p
-            id="team-code-msg"
-            role={message.kind === 'error' ? 'alert' : 'status'}
-            className={`mt-2 text-sm ${message.kind === 'error' ? 'text-red-700 dark:text-red-300' : 'text-brand dark:text-brand-dark'}`}
-          >
-            {message.text}
-          </p>
-        )}
+        <StatusMessage id="team-code-msg" message={message} />
       </form>
     </div>
   );
 }
 
-export function CreateTeamTab({
-  setTeams,
-  onViewTeams,
-}: {
-  setTeams: React.Dispatch<React.SetStateAction<Team[]>>;
-  onViewTeams: () => void;
-}) {
+// Create a team (you become its owner) and share its code.
+export function CreateTeamTab({ onViewTeams }: { onViewTeams: () => void }) {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [created, setCreated] = useState<Team | null>(null);
+  const [created, setCreated] = useState<{ name: string; code: string } | null>(null);
+  const [message, setMessage] = useState<Message>(null);
+  const [pending, startTransition] = useTransition();
 
   function create(e: React.FormEvent) {
     e.preventDefault();
-    const team: Team = { name: name.trim(), code: randomCode(), members: 1 };
-    setTeams((current) => [...current, team]);
-    setCreated(team);
-    setName('');
-    setDescription('');
+    startTransition(async () => {
+      const r = await createTeam(name, description);
+      if (r.ok && r.code) {
+        setCreated({ name: name.trim(), code: r.code });
+        setName('');
+        setDescription('');
+        setMessage(null);
+        router.refresh();
+      } else if (!r.ok) {
+        setMessage({ kind: 'error', text: r.error });
+      }
+    });
   }
 
   return (
     <div>
-      <PanelTitle title="Create a team" description="Start a team and share its code so others can join." />
-      <PlaceholderNote>Placeholder: the team only exists until you close Settings.</PlaceholderNote>
+      <PanelTitle title="Create a team" description="You'll be the owner. Share the code so others can join." />
 
       {created && (
-        <div role="status" className="mb-6 rounded-lg border border-brand/40 bg-brand/5 p-4 dark:border-brand-dark/40 dark:bg-brand-dark/10">
-          <p className="font-medium text-slate-900 dark:text-white">Created “{created.name}”</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-            Team code: <span className="font-mono text-base font-semibold text-slate-900 dark:text-white">{created.code}</span>
+        <div role="status" className="mb-6 border border-brand bg-brand-soft p-4">
+          <p className="text-[14px] font-medium text-fg">Created “{created.name}”</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] text-fg-muted">
+            Team code: <span className="font-mono text-[15px] font-semibold text-fg">{created.code}</span>
             <CopyButton getText={() => created.code} label="Copy code" />
-            <button type="button" onClick={onViewTeams} className="text-sm font-medium text-brand hover:underline dark:text-brand-dark">
+            <button type="button" onClick={onViewTeams} className="font-medium text-brand-ink hover:underline">
               View teams
             </button>
           </div>
@@ -184,9 +194,10 @@ export function CreateTeamTab({
             className={settingsField}
           />
         </div>
-        <button type="submit" className={btn.primary}>
-          Create team
+        <button type="submit" disabled={pending} className={btn.primary}>
+          {pending ? 'Creating…' : 'Create team'}
         </button>
+        <StatusMessage id="create-team-msg" message={message} />
       </form>
     </div>
   );

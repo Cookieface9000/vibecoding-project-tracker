@@ -35,9 +35,9 @@ export default function ProfileTab() {
           <path d="M12 58c3-11 11-17 20-17s17 6 20 17" fill="white" fillOpacity="0.9" />
         </svg>
         <div>
-          <p className="font-medium text-slate-900 dark:text-white">{FAKE_PROFILE.displayName}</p>
-          <p className="text-sm text-slate-500 dark:text-slate-400">@{FAKE_PROFILE.username}</p>
-          <button type="button" disabled className="mt-1 text-xs font-medium text-brand opacity-60 dark:text-brand-dark">
+          <p className="font-medium text-fg">{FAKE_PROFILE.displayName}</p>
+          <p className="text-sm text-fg-subtle">@{FAKE_PROFILE.username}</p>
+          <button type="button" disabled className="mt-1 text-xs font-medium text-brand-ink opacity-60">
             Change picture
           </button>
         </div>
@@ -79,7 +79,7 @@ export default function ProfileTab() {
               onClick={() => setShowPassword((s) => !s)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
-              className="absolute right-2 top-1/2 mt-[3px] -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:hover:text-slate-200"
+              className="absolute right-2 top-1/2 mt-[3px] -translate-y-1/2 rounded p-1 text-fg-subtle hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>

@@ -1,21 +1,43 @@
 -- Vibe Tracker schema (fresh install).
 -- Run once in Supabase: Dashboard → SQL Editor → paste → Run.
 
+-- Placeholder people (tasks are assigned to them; "Me" is the current user until auth exists).
+create table if not exists public.members (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique check (char_length(btrim(name)) between 1 and 60),
+  created_at  timestamptz not null default now()
+);
+
+-- Teams, joined by code (VT-XXXX). Projects can belong to a team.
+create table if not exists public.teams (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null check (char_length(btrim(name)) between 1 and 60),
+  code         text not null unique check (code ~ '^VT-[A-Z0-9]{4}$'),
+  description  text not null default '' check (char_length(description) <= 300),
+  created_at   timestamptz not null default now()
+);
+
+create table if not exists public.team_members (
+  team_id    uuid not null references public.teams (id) on delete cascade,
+  member_id  uuid not null references public.members (id) on delete cascade,
+  role       text not null default 'member' check (role in ('owner', 'member')),
+  joined_at  timestamptz not null default now(),
+  primary key (team_id, member_id)
+);
+create index if not exists team_members_member_idx on public.team_members (member_id);
+
+-- A project is personal (team_id null) or belongs to a team; created_by records its creator.
+-- Visible to: its creator, and every member of its team.
 create table if not exists public.projects (
   id           uuid primary key default gen_random_uuid(),
+  team_id      uuid references public.teams (id) on delete set null,
+  created_by   uuid references public.members (id) on delete set null,
   name         text not null check (char_length(btrim(name)) between 1 and 80),
   code         text not null check (code ~ '^[A-Z0-9]{2,6}$'),
   client       text not null default '' check (char_length(client) <= 80),
   description  text not null default '' check (char_length(description) <= 500),
   status       text not null default 'active' check (status in ('active', 'on-hold', 'completed')),
   created_at   timestamptz not null default now()
-);
-
--- Placeholder people a task can be assigned to.
-create table if not exists public.members (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null unique check (char_length(btrim(name)) between 1 and 60),
-  created_at  timestamptz not null default now()
 );
 
 -- Colour labels. `color` is a fixed palette key the UI maps to classes.
@@ -45,6 +67,7 @@ create table if not exists public.tasks (
   created_at          timestamptz not null default now()
 );
 create index if not exists tasks_project_id_idx on public.tasks (project_id);
+create index if not exists projects_team_idx on public.projects (team_id);
 
 -- AI prompt history per task, newest first in the UI.
 create table if not exists public.task_prompts (
@@ -67,8 +90,37 @@ create table if not exists public.deliverables (
 -- RLS on with NO policies: the public (publishable/anon) key can read or write nothing.
 -- The app talks to Supabase only from the server with the secret key, which bypasses RLS.
 alter table public.members enable row level security;
+alter table public.teams enable row level security;
+alter table public.team_members enable row level security;
 alter table public.labels enable row level security;
 alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_prompts enable row level security;
 alter table public.deliverables enable row level security;
+
+-- History of what happened to tasks (moves, handoffs, creation). Feeds the handoff map.
+create table if not exists public.task_events (
+  id          uuid primary key default gen_random_uuid(),
+  task_id     uuid not null references public.tasks (id) on delete cascade,
+  project_id  uuid not null references public.projects (id) on delete cascade,
+  kind        text not null check (kind in ('created', 'moved', 'handoff')),
+  from_value  text,
+  to_value    text,
+  actor       text not null default 'Me',
+  created_at  timestamptz not null default now()
+);
+create index if not exists task_events_project_idx on public.task_events (project_id, created_at desc);
+
+-- "task_id is blocked by depends_on". Both tasks must be in the same project (checked in the app).
+create table if not exists public.task_dependencies (
+  task_id     uuid not null references public.tasks (id) on delete cascade,
+  depends_on  uuid not null references public.tasks (id) on delete cascade,
+  active      boolean not null default true,   -- inactive links stay visible but don't block
+  created_at  timestamptz not null default now(),
+  primary key (task_id, depends_on),
+  check (task_id <> depends_on)
+);
+create index if not exists task_dependencies_depends_on_idx on public.task_dependencies (depends_on);
+
+alter table public.task_events enable row level security;
+alter table public.task_dependencies enable row level security;

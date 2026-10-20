@@ -109,12 +109,15 @@ Sizes: page/project title 24 px medium · column title 13 px semibold UPPERCASE,
 
 ## 4. Component principles
 - **Tickets (compact, uniform):** every ticket is the **same fixed height (88 px)**, so columns stack and line up. Content:
-  1. Title, at most 2 lines (clamped).
-  2. One meta row pinned to the bottom: **type icon** · **due chip** · **avatar** (right).
+  1. Title, at most 2 lines (clamped), plus a green **context icon** at top right, shown **only** when the task has AI context.
+  2. One meta row pinned to the bottom: **type icon** · **due chip** (date and optional time) · **label chip** · **avatar** (right).
 
-  No description, AI tool or context on the card; those live in the modal. A **3 px left stripe** shows type, and the **tint and border** show urgency. 8 px gap between tickets.
+  No coloured side stripe. The **whole-card tint and border** show urgency, the icon shows type, and the label chip shows the user-chosen colour label. 8 px gap between tickets.
+- **Placeholder lists (database):** the assignee comes from `members` and the colour label from `labels` (Frontend blue, Backend violet, Design pink, Infrastructure orange, Docs teal, Research slate). Due time is optional; blank means end of day.
+- **Edit task (toolbar):** a picker modal with search, grouped by stage. Pick a task → the edit form → Save. Cancel goes back to the picker.
+- **Context section (create/edit form):** a Markdown textarea pre-filled with the Background / Constraints / Tried so far / Pick up template, plus an AI-tool picker and **Copy context**. Copy context puts title + description + context on the clipboard as one briefing. An untouched template saves as "no context".
 - **Ticket modal (click any ticket):** a native `<dialog>` (Esc and backdrop click close it, focus returns to the ticket). It has:
-  - **Header:** `#CODE` + type chip + title, with a type-coloured left edge.
+  - **Header:** `#CODE` + type chip + title.
   - **Key facts:** a fixed 2×2 grid of Status (stage dot), Assignee, Due date (date + urgency chip) and Created.
   - **Description**, then **Context** (monospace, scrollable, "Claude · updated 2 h ago").
   - **Prompt history:** a vertical timeline, newest first, with an AI-tool badge, relative time (exact time on hover) and the prompt in monospace.
@@ -154,6 +157,21 @@ Sizes: page/project title 24 px medium · column title 13 px semibold UPPERCASE,
 ## 6. Wordmark
 - **Product name:** Vibe Tracker
 - **Wordmark:** the name in the heading font next to a small brand-coloured square badge.
+
+## 6a. Settings (cog, bottom of sidebar)
+A large modal with its own vertical tab list (↑/↓ move between tabs):
+
+| Tab | Contents |
+|---|---|
+| Profile | Placeholder: fake avatar, display name, username, email, masked password (show/hide). Read-only. |
+| Teams | The current team (green), other joined teams with **Switch**, and **Join a team** by code (`VT-XXXX`). Placeholder, kept in memory only. |
+| Create team | Name + description → a generated code with **Copy code**. Placeholder. |
+| Accessibility | **Colour vision:** Default / Red–green safe (Okabe–Ito blue, yellow, vermillion) / Blue–yellow safe / Monochrome. Plus **Reduce motion**. Applies app-wide through CSS variables and `data-cvd` on `<html>`, and is remembered per device. |
+| Keyboard shortcuts | A rebindable table: **Change** → press a key (Esc cancels). Clashes are rejected, and **Reset to defaults** is available. The built-in board keys are listed too. |
+
+**Default shortcuts:** `N` add task · `E` edit a task · `B` jump to the board · `C` new project · `G` all projects · `T` toggle theme · `,` settings · `?` shortcuts. Shortcuts are ignored while typing or when a dialog is open.
+
+**Also:** a "Skip to main content" link (first Tab stop). Cards announce "Has AI context". Drag moves are announced.
 
 ## 7. Scope notes
 - **Dark mode is in scope.** A toggle in the header remembers the choice and defaults to the OS setting.

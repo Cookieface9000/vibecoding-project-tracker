@@ -3,6 +3,73 @@
 @tailwind utilities;
 
 /*
+ * Surface + text + brand tokens (RGB triplets). Every surface is SOLID — no
+ * translucent layers — so colours never compound or muddy. Light and dark each
+ * get their own tuned ramp (dark is a cool slate ramp, not inverted greys).
+ * Contrast: fg-muted ≥ 7:1, fg-subtle ≥ 4.5:1 on their surfaces in both themes.
+ */
+:root {
+  --canvas: 245 247 248;       /* page background */
+  --sunken: 236 240 242;       /* column trays, wells */
+  --surface: 255 255 255;      /* cards, headers, inputs */
+  --raised: 255 255 255;       /* modals, popovers */
+  --muted: 241 245 247;        /* chips, code blocks, subtle fills */
+  --hover: 236 241 244;        /* hover fill on surface */
+  --line: 218 225 230;         /* borders, dividers */
+  --line-strong: 128 141 155;  /* input/control borders — 3.4:1 (non-text 3:1 rule) */
+  --avatar: 222 229 235;
+  --fg: 15 23 42;              /* primary text  (17:1 on surface) */
+  --fg-muted: 61 75 95;        /* secondary text (8.9:1) */
+  --fg-subtle: 88 103 124;     /* tertiary text (≥4.7:1 on every light surface) */
+
+  --brand: 15 118 110;         /* teal 700 — white text 5.5:1 */
+  --brand-hover: 17 94 89;
+  --brand-fg: 255 255 255;
+  --brand-soft: 228 243 241;   /* selected / drop-target fill */
+  --brand-ink: 15 118 110;     /* brand-coloured text and icons */
+
+  --sidebar: 11 27 32;         /* deep teal-slate */
+  --sidebar-hover: 20 40 46;
+  --sidebar-active: 26 52 59;
+  --sidebar-line: 28 46 52;
+  --sidebar-fg: 226 236 238;
+  --sidebar-fg-muted: 138 163 170;
+
+  --scrim: 4 12 20;
+  --tint: 7%;                  /* urgency tint strength on cards */
+  --chip-tint: 16%;
+}
+.dark {
+  --canvas: 12 17 29;
+  --sunken: 17 24 39;
+  --surface: 25 33 51;
+  --raised: 32 41 61;
+  --muted: 36 46 67;
+  --hover: 38 49 71;
+  --line: 45 57 80;
+  --line-strong: 98 115 142;   /* 3.2:1 on surface */
+  --avatar: 52 65 89;
+  --fg: 238 242 247;
+  --fg-muted: 190 201 215;     /* 9.6:1 on surface */
+  --fg-subtle: 148 163 184;    /* 5.6:1 on surface */
+
+  --brand: 45 212 191;         /* teal 400 — dark text 9:1 */
+  --brand-hover: 94 234 212;
+  --brand-fg: 4 47 46;
+  --brand-soft: 22 58 62;
+  --brand-ink: 94 234 212;
+
+  --sidebar: 8 13 24;
+  --sidebar-hover: 18 26 42;
+  --sidebar-active: 25 35 55;
+  --sidebar-line: 24 33 51;
+
+  --scrim: 0 3 10;
+  --tint: 13%;
+  --chip-tint: 24%;
+}
+
+/*
  * Meaning-carrying colours (DESIGN.md §2) as RGB triplets.
  * `data-cvd` on <html> (Settings → Accessibility) swaps them app-wide.
  */
@@ -103,5 +170,10 @@ html, body {
 }
 
 body {
-  @apply bg-surface-page font-sans text-slate-900 antialiased dark:bg-surface-page-dark dark:text-slate-200;
+  @apply bg-canvas font-sans text-[14px] text-fg antialiased;
+}
+
+/* Numbers line up in counts and dates. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }

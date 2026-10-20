@@ -21,7 +21,7 @@ function Combo({ combo }: { combo: string }) {
     <span className="inline-flex items-center gap-1">
       {comboKeys(combo).map((k, i) => (
         <Fragment key={i}>
-          {i > 0 && <span className="text-xs text-slate-400">+</span>}
+          {i > 0 && <span className="text-xs text-fg-subtle">+</span>}
           <Kbd>{k}</Kbd>
         </Fragment>
       ))}
@@ -64,7 +64,7 @@ export default function ShortcutsTab() {
       <table className="w-full text-sm">
         <caption className="sr-only">Customisable shortcuts</caption>
         <thead>
-          <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
             <th scope="col" className="pb-2 font-medium">
               Action
             </th>
@@ -80,11 +80,11 @@ export default function ShortcutsTab() {
           {SHORTCUT_ACTIONS.map((action) => {
             const isRecording = recording === action.id;
             return (
-              <tr key={action.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                <td className="py-2.5 pr-3 text-slate-700 dark:text-slate-200">{action.label}</td>
+              <tr key={action.id} className="border-b border-line last:border-0">
+                <td className="py-2.5 pr-3 text-fg-muted">{action.label}</td>
                 <td className="py-2.5 pr-3">
                   {isRecording ? (
-                    <span className="text-xs font-medium text-brand dark:text-brand-dark">Press a key…</span>
+                    <span className="text-xs font-medium text-brand-ink">Press a key…</span>
                   ) : (
                     <Combo combo={shortcuts[action.id]} />
                   )}
@@ -101,10 +101,10 @@ export default function ShortcutsTab() {
                     }}
                     onBlur={() => isRecording && setRecording(null)}
                     aria-label={isRecording ? `Recording new key for ${action.label}` : `Change shortcut for ${action.label}`}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                       isRecording
-                        ? 'bg-brand text-white'
-                        : 'border border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+                        ? 'bg-brand text-brand-fg'
+                        : 'border border-line text-fg-muted hover:bg-hover'
                     }`}
                   >
                     {isRecording ? 'Listening…' : 'Change'}
@@ -117,7 +117,7 @@ export default function ShortcutsTab() {
       </table>
 
       <div className="mt-3 flex min-h-[2rem] flex-wrap items-center justify-between gap-3">
-        <p role="status" aria-live="polite" className="text-sm text-slate-600 dark:text-slate-300">
+        <p role="status" aria-live="polite" className="text-sm text-fg-muted">
           {message}
         </p>
         <button
@@ -133,19 +133,19 @@ export default function ShortcutsTab() {
         </button>
       </div>
 
-      <h4 className="mb-2 mt-8 font-medium text-slate-900 dark:text-white">Built-in keys</h4>
+      <h4 className="mb-2 mt-8 font-medium text-fg">Built-in keys</h4>
       <ul className="space-y-2 text-sm">
         {BUILT_IN.map((row) => (
-          <li key={row.label} className="flex items-center justify-between gap-3 text-slate-700 dark:text-slate-200">
+          <li key={row.label} className="flex items-center justify-between gap-3 text-fg-muted">
             <span>{row.label}</span>
             <span className="flex shrink-0 items-center gap-2">
               {row.keys.map((combo, i) => (
                 <Fragment key={i}>
-                  {i > 0 && <span className="text-xs text-slate-400">or</span>}
+                  {i > 0 && <span className="text-xs text-fg-subtle">or</span>}
                   <span className="inline-flex items-center gap-1">
                     {combo.map((k, j) => (
                       <Fragment key={j}>
-                        {j > 0 && <span className="text-xs text-slate-400">+</span>}
+                        {j > 0 && <span className="text-xs text-fg-subtle">+</span>}
                         <Kbd>{k}</Kbd>
                       </Fragment>
                     ))}

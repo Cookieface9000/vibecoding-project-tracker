@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { deriveProjectCode, normaliseProjectCode } from '@/lib/project-code';
+import { canSee, getCurrentUser } from '@/lib/current-user';
+import { listMyTeams } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import {
   CONTEXT_TOOLS,
@@ -12,6 +14,7 @@ import {
   type DeliverableKind,
   type Status,
   type TaskInput,
+  type Team,
 } from '@/lib/types';
 
 // Server actions: the only write path to Supabase. Inputs come from the
@@ -23,7 +26,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface ProjectFormState {
   error?: string;
-  fields?: { name: string; code: string; client: string; description: string };
+  fields?: { name: string; code: string; client: string; description: string; teamId: string };
 }
 
 export async function createProject(_prev: ProjectFormState, formData: FormData): Promise<ProjectFormState> {
@@ -32,6 +35,7 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
     code: String(formData.get('code') ?? ''),
     client: String(formData.get('client') ?? '').trim(),
     description: String(formData.get('description') ?? '').trim(),
+    teamId: String(formData.get('teamId') ?? ''),
   };
 
   if (!fields.name) return { error: 'Give the project a name.', fields };
@@ -42,10 +46,21 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
   const code = normaliseProjectCode(fields.code) || deriveProjectCode(fields.name);
   if (!/^[A-Z0-9]{2,6}$/.test(code)) return { error: 'Code must be 2–6 letters or numbers.', fields };
 
+  // A project can only go into a team the creator belongs to ('' = personal).
+  const user = await getCurrentUser();
+  if (fields.teamId && !user.teamIds.includes(fields.teamId)) return { error: 'Choose a team you belong to.', fields };
+
   const db = supabase();
   const { data: project, error } = await db
     .from('projects')
-    .insert({ name: fields.name, code, client: fields.client, description: fields.description })
+    .insert({
+      name: fields.name,
+      code,
+      client: fields.client,
+      description: fields.description,
+      team_id: fields.teamId || null,
+      created_by: user.id,
+    })
     .select('id')
     .single();
   if (error) return { error: `Couldn't create the project: ${error.message}`, fields };
@@ -108,8 +123,17 @@ async function validate(input: TaskInput) {
   };
 }
 
+/** Only the project's creator and members of its team may change it. */
+async function assertAccess(projectId: string) {
+  if (!UUID.test(projectId)) throw new InvalidInput('Invalid project.');
+  const user = await getCurrentUser();
+  const { data } = await supabase().from('projects').select('created_by, team_id').eq('id', projectId).maybeSingle();
+  if (!data || !canSee(user, data)) throw new InvalidInput("You don't have access to this project.");
+}
+
 async function run(projectId: string, work: () => Promise<{ error: { message: string } | null }>): Promise<ActionResult> {
   try {
+    await assertAccess(projectId);
     const { error } = await work();
     if (error) return { ok: false, error: `Couldn't save: ${error.message}` };
   } catch (err) {
@@ -121,36 +145,193 @@ async function run(projectId: string, work: () => Promise<{ error: { message: st
   return { ok: true };
 }
 
-export async function createTask(input: TaskInput): Promise<ActionResult> {
-  return run(input.projectId, async () => {
-    const row = await validate(input);
-    return supabase()
-      .from('tasks')
-      .insert({ ...row, context_updated_at: row.context ? new Date().toISOString() : null });
+type Db = ReturnType<typeof supabase>;
+
+/** Record what happened to a task. History is best-effort: it never blocks the change itself. */
+async function logEvent(
+  db: Db,
+  e: { taskId: string; projectId: string; kind: 'created' | 'moved' | 'handoff'; from?: string | null; to?: string | null },
+) {
+  const user = await getCurrentUser();
+  await db.from('task_events').insert({
+    task_id: e.taskId,
+    project_id: e.projectId,
+    kind: e.kind,
+    from_value: e.from ?? null,
+    to_value: e.to ?? null,
+    actor: user.name,
   });
 }
 
-export async function updateTask(id: string, input: TaskInput): Promise<ActionResult> {
+/**
+ * Check that `taskId` may be blocked by exactly `ids`: other tasks in the same project, and
+ * no cycle (A blocked by B blocked by A) — inactive links count too, so a loop can't appear
+ * later just by switching a link back on.
+ */
+async function assertValidBlockers(db: Db, projectId: string, taskId: string, ids: string[]) {
+  if (ids.some((id) => !UUID.test(id))) throw new InvalidInput('Invalid blocking task.');
+  if (ids.includes(taskId)) throw new InvalidInput("A task can't block itself.");
+
+  const { data: projectTasks, error } = await db.from('tasks').select('id').eq('project_id', projectId);
+  if (error) throw new Error(error.message);
+  const inProject = new Set((projectTasks ?? []).map((t) => t.id as string));
+  if (!inProject.has(taskId) || ids.some((id) => !inProject.has(id))) {
+    throw new InvalidInput('Blocking tasks must be in the same project.');
+  }
+
+  const { data: edges } = await db.from('task_dependencies').select('task_id, depends_on').in('task_id', [...inProject]);
+  const graph = new Map<string, string[]>();
+  for (const e of edges ?? []) if (e.task_id !== taskId) graph.set(e.task_id, [...(graph.get(e.task_id) ?? []), e.depends_on]);
+  graph.set(taskId, ids);
+  const reachesTask = (from: string, seen = new Set<string>()): boolean => {
+    for (const next of graph.get(from) ?? []) {
+      if (next === taskId) return true;
+      if (!seen.has(next)) {
+        seen.add(next);
+        if (reachesTask(next, seen)) return true;
+      }
+    }
+    return false;
+  };
+  if (ids.some((id) => reachesTask(id))) {
+    throw new InvalidInput('That would create a loop: a task would end up blocking itself.');
+  }
+}
+
+/** Current blocker ids of a task. */
+async function currentBlockerIds(db: Db, taskId: string): Promise<string[]> {
+  const { data, error } = await db.from('task_dependencies').select('depends_on').eq('task_id', taskId);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((d) => d.depends_on as string);
+}
+
+/**
+ * Replace a task's "blocked by" list (from the edit form). Links that stay keep their
+ * active/inactive setting; new links start active.
+ */
+async function setDependencies(db: Db, projectId: string, taskId: string, dependsOn: string[]) {
+  const ids = [...new Set(dependsOn)].filter((id) => id !== taskId);
+  await assertValidBlockers(db, projectId, taskId, ids);
+
+  const existing = await currentBlockerIds(db, taskId);
+  const removed = existing.filter((id) => !ids.includes(id));
+  const added = ids.filter((id) => !existing.includes(id));
+  if (removed.length) {
+    const del = await db.from('task_dependencies').delete().eq('task_id', taskId).in('depends_on', removed);
+    if (del.error) throw new Error(del.error.message);
+  }
+  if (added.length) {
+    const ins = await db.from('task_dependencies').insert(added.map((depends_on) => ({ task_id: taskId, depends_on, active: true })));
+    if (ins.error) throw new Error(ins.error.message);
+  }
+}
+
+// ── Blockers, managed from the task itself ──────────────────────────────────
+
+/** Add an existing task as a blocker (active). */
+export async function addBlocker(taskId: string, projectId: string, blockerId: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(taskId)) throw new InvalidInput('Invalid task.');
+    const db = supabase();
+    const existing = await currentBlockerIds(db, taskId);
+    if (existing.includes(blockerId)) throw new InvalidInput('That task is already a blocker.');
+    await assertValidBlockers(db, projectId, taskId, [...existing, blockerId]);
+    return db.from('task_dependencies').insert({ task_id: taskId, depends_on: blockerId, active: true });
+  });
+}
+
+/** Create a new To Do task and make it a blocker of `taskId` in one step. */
+export async function createBlockerTask(taskId: string, projectId: string, rawTitle: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(taskId)) throw new InvalidInput('Invalid task.');
+    const title = rawTitle.trim();
+    if (!title) throw new InvalidInput('Give the blocker a title.');
+    if (title.length > 200) throw new InvalidInput('Title must be 200 characters or fewer.');
+    const db = supabase();
+    const user = await getCurrentUser();
+    // The task being blocked must be in this project (also guards the new link).
+    await assertValidBlockers(db, projectId, taskId, await currentBlockerIds(db, taskId));
+
+    const { data: blocker, error } = await db
+      .from('tasks')
+      .insert({ project_id: projectId, title, status: 'todo', type: 'feature', assignee: user.name })
+      .select('id')
+      .single();
+    if (error) return { error };
+    await logEvent(db, { taskId: blocker.id, projectId, kind: 'created', to: 'todo' });
+    return db.from('task_dependencies').insert({ task_id: taskId, depends_on: blocker.id, active: true });
+  });
+}
+
+/** Switch a blocker on (blocks) or off (kept for reference, doesn't block). */
+export async function setBlockerActive(taskId: string, projectId: string, blockerId: string, active: boolean): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(taskId) || !UUID.test(blockerId)) throw new InvalidInput('Invalid blocker.');
+    await assertValidBlockers(supabase(), projectId, taskId, []); // task must be in this project
+    return supabase()
+      .from('task_dependencies')
+      .update({ active: Boolean(active) })
+      .eq('task_id', taskId)
+      .eq('depends_on', blockerId);
+  });
+}
+
+export async function removeBlocker(taskId: string, projectId: string, blockerId: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(taskId) || !UUID.test(blockerId)) throw new InvalidInput('Invalid blocker.');
+    await assertValidBlockers(supabase(), projectId, taskId, []); // task must be in this project
+    return supabase().from('task_dependencies').delete().eq('task_id', taskId).eq('depends_on', blockerId);
+  });
+}
+
+export async function createTask(input: TaskInput, dependsOn: string[] = []): Promise<ActionResult> {
+  return run(input.projectId, async () => {
+    const row = await validate(input);
+    const db = supabase();
+    const { data, error } = await db
+      .from('tasks')
+      .insert({ ...row, context_updated_at: row.context ? new Date().toISOString() : null })
+      .select('id')
+      .single();
+    if (error) return { error };
+    await setDependencies(db, row.project_id, data.id, dependsOn);
+    await logEvent(db, { taskId: data.id, projectId: row.project_id, kind: 'created', to: row.status });
+    return { error: null };
+  });
+}
+
+export async function updateTask(id: string, input: TaskInput, dependsOn?: string[]): Promise<ActionResult> {
   return run(input.projectId, async () => {
     if (!UUID.test(id)) throw new InvalidInput('Invalid task.');
     const row = await validate(input);
     const db = supabase();
 
-    // Bump contextUpdatedAt only when the context text actually changed.
     const { data: current, error: readError } = await db
       .from('tasks')
-      .select('context')
+      .select('context, status, assignee')
       .eq('id', id)
       .eq('project_id', row.project_id)
       .single();
     if (readError) return { error: readError };
-    const contextChanged = current.context !== row.context;
 
-    return db
+    // Dependencies first: if they're invalid (e.g. a loop), nothing else is saved.
+    if (dependsOn) await setDependencies(db, row.project_id, id, dependsOn);
+
+    // Bump contextUpdatedAt only when the context text actually changed.
+    const contextChanged = current.context !== row.context;
+    const { error } = await db
       .from('tasks')
       .update(contextChanged ? { ...row, context_updated_at: new Date().toISOString() } : row)
       .eq('id', id)
       .eq('project_id', row.project_id);
+    if (error) return { error };
+    if (current.status !== row.status) {
+      await logEvent(db, { taskId: id, projectId: row.project_id, kind: 'moved', from: current.status, to: row.status });
+    }
+    if (current.assignee !== row.assignee) {
+      await logEvent(db, { taskId: id, projectId: row.project_id, kind: 'handoff', from: current.assignee, to: row.assignee });
+    }
+    return { error: null };
   });
 }
 
@@ -159,7 +340,13 @@ export async function moveTask(id: string, projectId: string, status: Status): P
   return run(projectId, async () => {
     if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
     if (!isStatus(status)) throw new InvalidInput('Choose a valid status.');
-    return supabase().from('tasks').update({ status }).eq('id', id).eq('project_id', projectId);
+    const db = supabase();
+    const { data: current } = await db.from('tasks').select('status').eq('id', id).eq('project_id', projectId).single();
+    const { error } = await db.from('tasks').update({ status }).eq('id', id).eq('project_id', projectId);
+    if (!error && current && current.status !== status) {
+      await logEvent(db, { taskId: id, projectId, kind: 'moved', from: current.status, to: status });
+    }
+    return { error };
   });
 }
 
@@ -170,7 +357,12 @@ export async function handOffTask(id: string, projectId: string, assignee: strin
     const db = supabase();
     const { data: member } = await db.from('members').select('name').eq('name', assignee).maybeSingle();
     if (!member) throw new InvalidInput('Choose someone from the list.');
-    return db.from('tasks').update({ assignee: member.name }).eq('id', id).eq('project_id', projectId);
+    const { data: current } = await db.from('tasks').select('assignee').eq('id', id).eq('project_id', projectId).single();
+    const { error } = await db.from('tasks').update({ assignee: member.name }).eq('id', id).eq('project_id', projectId);
+    if (!error && current && current.assignee !== member.name) {
+      await logEvent(db, { taskId: id, projectId, kind: 'handoff', from: current.assignee, to: member.name });
+    }
+    return { error };
   });
 }
 
@@ -202,4 +394,65 @@ export async function setDeliverable(projectId: string, kind: DeliverableKind, u
     }
     return supabase().from('deliverables').upsert({ project_id: projectId, kind, url: trimmed });
   });
+}
+
+// ── Teams ───────────────────────────────────────────────────────────────────
+
+const TEAM_CODE = /^VT-[A-Z0-9]{4}$/;
+
+function randomTeamCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'VT-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+export type TeamResult = { ok: true; teams: Team[]; message?: string } | { ok: false; error: string };
+
+/** Teams the current user belongs to (for Settings and the project form). */
+export async function getMyTeams(): Promise<TeamResult> {
+  try {
+    return { ok: true, teams: await listMyTeams() };
+  } catch {
+    return { ok: false, error: "Couldn't load your teams." };
+  }
+}
+
+/** Join an existing team by its code. */
+export async function joinTeam(rawCode: string): Promise<TeamResult> {
+  const code = rawCode.trim().toUpperCase();
+  if (!TEAM_CODE.test(code)) return { ok: false, error: 'Team codes look like VT-AB12.' };
+  const user = await getCurrentUser();
+  const db = supabase();
+  const { data: team } = await db.from('teams').select('id, name').eq('code', code).maybeSingle();
+  if (!team) return { ok: false, error: `No team has the code ${code}.` };
+  if (user.teamIds.includes(team.id)) return { ok: false, error: `You're already in ${team.name}.` };
+  const { error } = await db.from('team_members').insert({ team_id: team.id, member_id: user.id, role: 'member' });
+  if (error) return { ok: false, error: `Couldn't join: ${error.message}` };
+  revalidatePath('/', 'layout');
+  return { ok: true, teams: await listMyTeams(), message: `Joined ${team.name}. Its projects are now in your list.` };
+}
+
+/** Create a team (you become its owner) and get a shareable join code. */
+export async function createTeam(rawName: string, rawDescription: string): Promise<TeamResult & { code?: string }> {
+  const name = rawName.trim();
+  const description = rawDescription.trim();
+  if (!name) return { ok: false, error: 'Give the team a name.' };
+  if (name.length > 60) return { ok: false, error: 'Name must be 60 characters or fewer.' };
+  if (description.length > 300) return { ok: false, error: 'Description must be 300 characters or fewer.' };
+
+  const user = await getCurrentUser();
+  const db = supabase();
+  // Codes are unique; retry on the (unlikely) collision.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = randomTeamCode();
+    const { data: team, error } = await db.from('teams').insert({ name, code, description }).select('id').single();
+    if (error) {
+      if (error.code === '23505') continue; // unique violation: try another code
+      return { ok: false, error: `Couldn't create the team: ${error.message}` };
+    }
+    const { error: memberError } = await db.from('team_members').insert({ team_id: team.id, member_id: user.id, role: 'owner' });
+    if (memberError) return { ok: false, error: `Team created, but joining it failed: ${memberError.message}` };
+    revalidatePath('/', 'layout');
+    return { ok: true, teams: await listMyTeams(), code, message: `Created ${name}.` };
+  }
+  return { ok: false, error: "Couldn't generate a unique team code. Please try again." };
 }

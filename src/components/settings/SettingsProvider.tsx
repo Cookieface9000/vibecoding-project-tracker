@@ -128,6 +128,9 @@ export default function SettingsProvider({ children }: { children: React.ReactNo
         case 'allProjects':
           router.push('/');
           break;
+        case 'openGuide':
+          router.push('/guide');
+          break;
         case 'toggleTheme':
           toggleTheme();
           break;

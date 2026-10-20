@@ -36,9 +36,9 @@ export default function Modal({
       }}
       onClick={(e) => e.target === e.currentTarget && ref.current?.close()}
       aria-labelledby={labelledBy}
-      className={(size === 'lg' ? 'w-[min(60rem,calc(100vw-2rem))] ' : 'w-[min(42rem,calc(100vw-2rem))] ') + "m-auto rounded-xl border border-slate-200 bg-surface-card p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/50 backdrop:backdrop-blur-sm dark:border-slate-700 dark:bg-surface-card-dark dark:text-slate-100"}
+      className={(size === 'lg' ? 'w-[min(60rem,calc(100vw-2rem))] ' : 'w-[min(42rem,calc(100vw-2rem))] ') + "m-auto rounded-xl border border-line bg-raised p-0 text-fg shadow-modal backdrop:bg-scrim/60"}
     >
-      <div className="flex max-h-[85vh] flex-col">{children}</div>
+      <div className="flex max-h-[90vh] flex-col">{children}</div>
     </dialog>
   );
 }
@@ -58,11 +58,11 @@ export function ModalHeader({
 }) {
   return (
     <div
-      className={`flex items-start justify-between gap-4 border-b border-b-slate-200 px-6 py-4 dark:border-b-slate-700 ${accent ? `border-l-4 ${accent}` : ''}`}
+      className={`flex items-start justify-between gap-4 border-b border-b-line px-5 py-4 ${accent ? `border-l-4 ${accent}` : ''}`}
     >
       <div className="min-w-0">
         {eyebrow && <div className="flex items-center gap-2 text-xs">{eyebrow}</div>}
-        <h2 id={id} className="mt-1 font-heading text-xl font-medium leading-snug">
+        <h2 id={id} className="mt-0.5 text-base font-semibold leading-snug tracking-[-0.01em]">
           {title}
         </h2>
       </div>
@@ -70,7 +70,7 @@ export function ModalHeader({
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="-mr-2 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+        className="-mr-2 rounded-md p-1.5 text-fg-subtle hover:bg-hover hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" />
@@ -80,13 +80,5 @@ export function ModalHeader({
   );
 }
 
-export const btn = {
-  primary:
-    'inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-60',
-  secondary:
-    'inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
-  danger:
-    'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-500/10',
-  dangerSolid:
-    'inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 disabled:opacity-60',
-};
+// Shared control and form styles live in ./ui (a plain module, so server pages can use them too).
+export { btn, field, fieldHint, fieldLabel } from './ui';

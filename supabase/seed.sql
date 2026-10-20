@@ -59,3 +59,111 @@ update public.tasks set label_id = (select id from public.labels where name = 'F
 update public.tasks set label_id = (select id from public.labels where name = 'Infrastructure')
   where title = 'Set up CI pipeline';
 update public.tasks set due_time = '17:00' where title = 'Migrate user settings to new API';
+
+-- Teams (joined by code) and who is in them. "Me" is the current user until auth exists.
+insert into public.teams (name, code, description) values
+  ('Platform Team', 'VT-PLAT', 'Core platform, auth and account services.'),
+  ('Payments Squad', 'VT-PAYS', 'Checkout, billing and payment providers.'),
+  ('Design Guild', 'VT-DSGN', 'Design system and UX research.')
+on conflict (code) do nothing;
+
+insert into public.team_members (team_id, member_id, role)
+select t.id, m.id, v.role
+from (values
+  ('VT-PLAT', 'Me', 'owner'), ('VT-PLAT', 'Alex Morgan', 'member'), ('VT-PLAT', 'Sam Patel', 'member'),
+  ('VT-PAYS', 'Me', 'member'), ('VT-PAYS', 'Jordan Lee', 'owner'), ('VT-PAYS', 'Riley Chen', 'member'),
+  ('VT-DSGN', 'Alex Morgan', 'owner'), ('VT-DSGN', 'Riley Chen', 'member')
+) as v(code, member, role)
+join public.teams t on t.code = v.code
+join public.members m on m.name = v.member
+on conflict do nothing;
+
+-- The demo project is Me's, in Platform Team.
+update public.projects p set
+  created_by = (select id from public.members where name = 'Me'),
+  team_id = (select t.id from public.teams t where t.code = 'VT-PLAT')
+where p.code = 'CP';
+
+-- Projects created by teammates: two shared with Me, one in a team Me isn't in (hidden).
+with new_projects as (
+  insert into public.projects (name, code, client, description, team_id, created_by)
+  select v.name, v.pcode, v.client, v.descr, t.id, m.id
+  from (values
+    ('Mobile App Redesign', 'MAR', 'Internal', 'New navigation and onboarding for the iOS and Android apps.', 'VT-PLAT', 'Alex Morgan'),
+    ('Fraud Detection Rules', 'FDR', 'Risk & Compliance', 'Rule engine for flagging suspicious payments.', 'VT-PAYS', 'Jordan Lee'),
+    ('Icon Library Refresh', 'ICON', 'Internal', 'Redraw the product icon set on a 24 px grid.', 'VT-DSGN', 'Alex Morgan')
+  ) as v(name, pcode, client, descr, tcode, creator)
+  join public.teams t on t.code = v.tcode
+  join public.members m on m.name = v.creator
+  returning id, code
+),
+links as (
+  insert into public.deliverables (project_id, kind)
+  select np.id, k from new_projects np, unnest(array['presentation', 'demo', 'report', 'documentation']) as k
+)
+insert into public.tasks (project_id, title, description, type, status, assignee, due_date)
+select np.id, v.title, v.descr, v.type, v.status, v.assignee, current_date + v.days
+from new_projects np
+join (values
+  ('MAR', 'Prototype new tab bar', 'Five-tab layout with a floating create button.', 'feature', 'in-progress', 'Alex Morgan', 3),
+  ('MAR', 'Onboarding skips step 2 on Android', 'Back gesture jumps past permissions.', 'bug', 'todo', 'Me', 1),
+  ('FDR', 'Velocity rule for card testing', 'Flag more than 5 small charges per minute per card.', 'feature', 'review', 'Jordan Lee', -1),
+  ('FDR', 'Export flagged payments to CSV', 'For the weekly compliance review.', 'feature', 'todo', 'Riley Chen', 6),
+  ('ICON', 'Audit current icon usage', 'List every icon used in the product.', 'feature', 'todo', 'Alex Morgan', 5)
+) as v(pcode, title, descr, type, status, assignee, days) on v.pcode = np.code;
+
+-- Prompt history spread over ~12 days for the Insights timeline.
+insert into public.task_prompts (task_id, tool, prompt, created_at)
+select t.id, v.tool, v.prompt, now() - v.ago
+from public.tasks t
+join public.projects p on p.id = t.project_id
+join (values
+  ('CP', 'Add rate limiting to /login', 'Claude', 'Design a sliding-window rate limiter for /login keyed by IP and account. Redis is available.', interval '11 days'),
+  ('CP', 'Add rate limiting to /login', 'Cursor', 'Implement the limiter as Express middleware with unit tests.', interval '9 days'),
+  ('CP', 'Set up CI pipeline', 'ChatGPT', 'Write a GitHub Actions workflow: lint, typecheck, build on every PR, cache npm.', interval '10 days'),
+  ('CP', 'Set up CI pipeline', 'Claude', 'The build step fails on Windows runners with EPERM; how do I fix it?', interval '8 days'),
+  ('CP', 'Checkout total rounds incorrectly', 'Claude', 'Totals are off by 1p with 3+ discounts. Here is the reducer. Find the rounding bug.', interval '4 days'),
+  ('CP', 'Checkout total rounds incorrectly', 'Cursor', 'Switch money maths to integer pence and add property tests.', interval '3 days'),
+  ('CP', 'Checkout total rounds incorrectly', 'Claude', 'Review the diff for edge cases with percentage + fixed discounts.', interval '1 day'),
+  ('MAR', 'Prototype new tab bar', 'Lovable', 'Prototype a five-tab mobile nav with a floating create button.', interval '6 days'),
+  ('MAR', 'Prototype new tab bar', 'Claude', 'Make the tab bar accessible: labels, focus order, 44pt targets.', interval '2 days'),
+  ('MAR', 'Onboarding skips step 2 on Android', 'ChatGPT', 'Android back gesture skips the permissions step. How to intercept it in React Navigation?', interval '1 day')
+) as v(pcode, title, tool, prompt, ago) on v.pcode = p.code and v.title = t.title;
+
+update public.tasks set
+  context = E'## Context\n**Background**\nCheckout totals with 3+ discounted items are off by 1p.\n\n**Constraints**\n- Must not change displayed prices.\n\n**Tried so far**\nFound float maths in the discount reducer.\n\n**Pick up**\nFinish moving to integer pence; review edge cases.',
+  context_tool = 'Claude',
+  context_updated_at = now() - interval '1 day'
+where title = 'Checkout total rounds incorrectly';
+
+-- Handoff + move history for the handoff map.
+insert into public.task_events (task_id, project_id, kind, from_value, to_value, actor, created_at)
+select t.id, t.project_id, v.kind, v.from_value, v.to_value, v.actor, now() - v.ago
+from public.tasks t
+join public.projects p on p.id = t.project_id
+join (values
+  ('CP', 'Migrate user settings to new API', 'handoff', 'Me', 'Alex Morgan', 'Me', interval '6 days'),
+  ('CP', 'Migrate user settings to new API', 'handoff', 'Alex Morgan', 'Jordan Lee', 'Alex Morgan', interval '2 days'),
+  ('CP', 'Checkout total rounds incorrectly', 'handoff', 'Sam Patel', 'Me', 'Sam Patel', interval '5 days'),
+  ('CP', 'Checkout total rounds incorrectly', 'moved', 'in-progress', 'review', 'Me', interval '1 day'),
+  ('CP', 'Set up CI pipeline', 'handoff', 'Me', 'Sam Patel', 'Me', interval '10 days'),
+  ('CP', 'Set up CI pipeline', 'handoff', 'Sam Patel', 'Me', 'Sam Patel', interval '8 days'),
+  ('CP', 'Set up CI pipeline', 'moved', 'review', 'done', 'Me', interval '7 days'),
+  ('CP', 'Add rate limiting to /login', 'handoff', 'Alex Morgan', 'Me', 'Alex Morgan', interval '9 days'),
+  ('MAR', 'Prototype new tab bar', 'handoff', 'Me', 'Alex Morgan', 'Me', interval '4 days'),
+  ('MAR', 'Onboarding skips step 2 on Android', 'handoff', 'Alex Morgan', 'Me', 'Alex Morgan', interval '1 day')
+) as v(pcode, title, kind, from_value, to_value, actor, ago) on v.pcode = p.code and v.title = t.title;
+
+-- Dependencies ("blocked by").
+insert into public.task_dependencies (task_id, depends_on)
+select a.id, b.id
+from (values
+  ('CP', 'Checkout total rounds incorrectly', 'Migrate user settings to new API'),
+  ('CP', 'Migrate user settings to new API', 'Set up CI pipeline'),
+  ('CP', 'Add rate limiting to /login', 'Set up CI pipeline'),
+  ('MAR', 'Onboarding skips step 2 on Android', 'Prototype new tab bar')
+) as v(pcode, task, blocker)
+join public.projects p on p.code = v.pcode
+join public.tasks a on a.project_id = p.id and a.title = v.task
+join public.tasks b on b.project_id = p.id and b.title = v.blocker
+on conflict do nothing;

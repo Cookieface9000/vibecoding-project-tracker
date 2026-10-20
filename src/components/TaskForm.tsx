@@ -17,12 +17,10 @@ import {
   type TaskType,
 } from '@/lib/types';
 import CopyButton from './CopyButton';
-import { ModalHeader, btn } from './Modal';
-import { LABEL_STYLE, TYPE_STYLE } from './task-style';
+import { ModalHeader, btn, field, fieldLabel } from './Modal';
+import { LABEL_STYLE, STAGE_DOT, TYPE_STYLE } from './task-style';
 
-const field =
-  'mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-brand-dark';
-const labelCls = 'block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400';
+const labelCls = fieldLabel;
 
 // Create or edit a task. Assignee and label come from the placeholder lists in the DB.
 export default function TaskForm({
@@ -30,6 +28,7 @@ export default function TaskForm({
   projectCode,
   members,
   labels,
+  allTasks = [],
   task,
   defaultStatus = 'todo',
   onDone,
@@ -39,6 +38,7 @@ export default function TaskForm({
   projectCode: string;
   members: Member[];
   labels: Label[];
+  allTasks?: BoardTask[];
   task?: BoardTask;
   defaultStatus?: Status;
   onDone: () => void;
@@ -55,6 +55,8 @@ export default function TaskForm({
   const [dueTime, setDueTime] = useState(task?.dueTime ?? '');
   const [context, setContext] = useState(task ? task.context || CONTEXT_TEMPLATE : CONTEXT_TEMPLATE);
   const [contextTool, setContextTool] = useState<ContextTool | ''>(task?.contextTool ?? '');
+  const [dependsOn, setDependsOn] = useState<string[]>(task?.dependsOn ?? []);
+  const otherTasks = allTasks.filter((t) => t.id !== task?.id);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -79,7 +81,7 @@ export default function TaskForm({
       contextTool: contextTool || null,
     };
     startTransition(async () => {
-      const result = task ? await updateTask(task.id, input) : await createTask(input);
+      const result = task ? await updateTask(task.id, input, dependsOn) : await createTask(input, dependsOn);
       if (result.ok) onDone();
       else setError(result.error);
     });
@@ -101,7 +103,7 @@ export default function TaskForm({
     <form onSubmit={submit} className="flex min-h-0 flex-col">
       <ModalHeader
         id={titleId}
-        eyebrow={<span className="font-mono text-slate-500 dark:text-slate-400">#{projectCode}</span>}
+        eyebrow={<span className="font-mono text-fg-subtle">#{projectCode}</span>}
         title={editing ? 'Edit task' : 'New task'}
         onClose={onCancel}
       />
@@ -154,10 +156,10 @@ export default function TaskForm({
                 return (
                   <label
                     key={t}
-                    className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/40 ${
+                    className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand ${
                       selected
-                        ? `${s.chip} border-current bg-white dark:bg-slate-900`
-                        : 'border-slate-300 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
+                        ? `${s.chip} border-current bg-surface`
+                        : 'border-line-strong text-fg-subtle hover:bg-hover'
                     }`}
                   >
                     <input type="radio" name="type" value={t} checked={selected} onChange={() => setType(t)} className="sr-only" />
@@ -231,7 +233,7 @@ export default function TaskForm({
 
           <div>
             <label htmlFor="task-due-time" className={labelCls}>
-              Due time <span className="normal-case tracking-normal text-slate-400">(optional)</span>
+              Due time <span className="normal-case tracking-normal text-fg-subtle">(optional)</span>
             </label>
             <input
               id="task-due-time"
@@ -242,18 +244,47 @@ export default function TaskForm({
               aria-describedby="task-due-time-hint"
               className={field}
             />
-            <p id="task-due-time-hint" className="mt-1 text-xs text-slate-400">
+            <p id="task-due-time-hint" className="mt-1 text-xs text-fg-subtle">
               {dueDate ? 'Blank = end of day' : 'Set a date first'}
             </p>
           </div>
         </div>
 
+        {/* Blocked by: tasks that must finish first. Cycles are rejected on save. */}
+        {otherTasks.length > 0 && (
+          <fieldset>
+            <legend className={labelCls}>
+              Blocked by <span className="font-normal text-fg-subtle">(optional)</span>
+            </legend>
+            <ul className="mt-1.5 max-h-40 divide-y divide-line overflow-y-auto border border-line-strong">
+              {otherTasks.map((t) => {
+                const checked = dependsOn.includes(t.id);
+                return (
+                  <li key={t.id}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-hover has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setDependsOn((d) => (checked ? d.filter((x) => x !== t.id) : [...d, t.id]))}
+                        className="h-3.5 w-3.5 accent-brand"
+                      />
+                      <span className={'h-2 w-2 shrink-0 rounded-full ' + STAGE_DOT[t.status]} aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-fg">{t.title}</span>
+                      <span className="shrink-0 text-[11px] text-fg-subtle">{STAGES.find((st) => st.id === t.status)?.label}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </fieldset>
+        )}
+
         {/* AI context: paste-ready briefing for the next AI tool or teammate. */}
-        <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+        <section className="rounded-lg border border-line p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label htmlFor="task-context" className={`${labelCls} flex items-center gap-1.5`}>
               <MessageSquareText className="h-3.5 w-3.5" aria-hidden />
-              Context <span className="normal-case tracking-normal text-slate-400">(Markdown)</span>
+              Context <span className="normal-case tracking-normal text-fg-subtle">(Markdown)</span>
             </label>
             <CopyButton getText={() => formatBriefing({ title, description, context }, projectCode)} label="Copy context" />
           </div>
@@ -267,7 +298,7 @@ export default function TaskForm({
             aria-describedby="task-context-hint"
           />
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-            <p id="task-context-hint" className="max-w-xs text-xs text-slate-400">
+            <p id="task-context-hint" className="max-w-xs text-xs text-fg-subtle">
               Copies title, description and context as one Markdown briefing, ready to paste into any AI chat.
             </p>
             <div className="w-40">
@@ -292,12 +323,12 @@ export default function TaskForm({
         </section>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+      <div className="flex items-center justify-between gap-3 border-t border-line px-6 py-4">
         <div>
           {editing &&
             (confirmingDelete ? (
               <span className="flex items-center gap-2">
-                <span className="text-sm text-slate-600 dark:text-slate-300">Delete this task? This can&apos;t be undone.</span>
+                <span className="text-sm text-fg-muted">Delete this task? This can&apos;t be undone.</span>
                 <button type="button" onClick={remove} disabled={pending} className={btn.dangerSolid}>
                   Delete
                 </button>

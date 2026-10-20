@@ -17,7 +17,8 @@ import {
 } from '@dnd-kit/core';
 import { Pencil, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { handOffTask, moveTask } from '@/app/actions';
+import { addBlocker, createBlockerTask, handOffTask, moveTask, removeBlocker, setBlockerActive, type ActionResult } from '@/app/actions';
+import { isBlocked } from '@/lib/blocking';
 import { STAGES, type BoardTask, type Label, type Member, type Status } from '@/lib/types';
 import EditPicker from './EditPicker';
 import Modal, { btn } from './Modal';
@@ -25,6 +26,7 @@ import TaskCard, { TaskCardBody } from './TaskCard';
 import TaskDetails from './TaskDetails';
 import TaskForm from './TaskForm';
 import Toast, { type ToastMessage } from './Toast';
+import TotalContext, { type BoardProjectInfo } from './TotalContext';
 import { initials } from './task-style';
 
 // Coloured underline per stage (DESIGN.md §2): grey → blue → violet → green.
@@ -77,12 +79,14 @@ export default function Board({
   labels,
   projectId,
   projectCode,
+  project,
 }: {
   tasks: BoardTask[];
   members: Member[];
   labels: Label[];
   projectId: string;
   projectCode: string;
+  project: BoardProjectInfo;
 }) {
   // Local copy for optimistic drag-and-drop; resyncs whenever the server sends fresh data.
   const [tasks, setTasks] = useState(serverTasks);
@@ -96,6 +100,57 @@ export default function Board({
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
   const justDropped = useRef(false);
+  // Motion cues: the card just dropped settles in; the card just handed off glows.
+  const [settledId, setSettledId] = useState<string | null>(null);
+  const [glowId, setGlowId] = useState<string | null>(null);
+
+  // A task is blocked while any of its blockers isn't done.
+  const blockedIds = useMemo(() => {
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    return new Set(tasks.filter((t) => isBlocked(t, byId)).map((t) => t.id));
+  }, [tasks]);
+
+  // Blockers managed from inside a task. Toggle/remove update instantly and roll back on
+  // failure; add/create wait for the server (which refreshes the board).
+  const [blockerBusy, setBlockerBusy] = useState(false);
+  function blockerAction(optimistic: ((ts: BoardTask[]) => BoardTask[]) | null, call: () => Promise<ActionResult>, okText: string) {
+    const before = tasks;
+    if (optimistic) setTasks(optimistic);
+    setBlockerBusy(true);
+    startTransition(async () => {
+      const result = await call();
+      setBlockerBusy(false);
+      if (result.ok) {
+        setToast({ kind: 'ok', text: okText, id: Date.now() });
+      } else {
+        if (optimistic) setTasks(before);
+        setToast({ kind: 'error', text: result.error, id: Date.now() });
+      }
+    });
+  }
+  const blockerHandlers = (task: BoardTask) => ({
+    busy: blockerBusy,
+    onAdd: (blockerId: string) => blockerAction(null, () => addBlocker(task.id, projectId, blockerId), 'Blocker added.'),
+    onCreate: (title: string) =>
+      blockerAction(null, () => createBlockerTask(task.id, projectId, title), `Created “${title.trim()}” as a blocker.`),
+    onToggle: (blockerId: string, active: boolean) =>
+      blockerAction(
+        (ts) => ts.map((t) => (t.id === task.id ? { ...t, blockers: t.blockers.map((b) => (b.taskId === blockerId ? { ...b, active } : b)) } : t)),
+        () => setBlockerActive(task.id, projectId, blockerId, active),
+        active ? 'Blocker is active.' : 'Blocker switched off: it no longer blocks.',
+      ),
+    onRemove: (blockerId: string) =>
+      blockerAction(
+        (ts) =>
+          ts.map((t) =>
+            t.id === task.id
+              ? { ...t, dependsOn: t.dependsOn.filter((d) => d !== blockerId), blockers: t.blockers.filter((b) => b.taskId !== blockerId) }
+              : t,
+          ),
+        () => removeBlocker(task.id, projectId, blockerId),
+        'Blocker removed.',
+      ),
+  });
 
   /** "Hand off to…": reassign straight away, confirm with a toast, roll back on failure. */
   function handOff(task: BoardTask, assignee: string) {
@@ -107,6 +162,8 @@ export default function Board({
       setHandingOff(false);
       if (result.ok) {
         setToast({ kind: 'ok', text: `Handed off to ${assignee}.`, id: Date.now() });
+        setGlowId(task.id);
+        setTimeout(() => setGlowId((g) => (g === task.id ? null : g)), 2600);
       } else {
         setTasks(before);
         setToast({ kind: 'error', text: result.error, id: Date.now() });
@@ -164,6 +221,8 @@ export default function Board({
     const before = tasks;
     // Move to the end of the target column straight away; roll back if the save fails.
     setTasks((current) => [...current.filter((t) => t.id !== id), { ...task, status: to }]);
+    setSettledId(id);
+    setTimeout(() => setSettledId((s2) => (s2 === id ? null : s2)), 600);
     startTransition(async () => {
       const result = await moveTask(id, projectId, to);
       if (!result.ok) {
@@ -177,53 +236,54 @@ export default function Board({
     if (!justDropped.current) setModal({ kind: 'view', id });
   }
 
-  const formProps = { projectId, projectCode, members, labels };
+  const formProps = { projectId, projectCode, members, labels, allTasks: tasks };
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setModal({ kind: 'create', status: 'todo' })} className={btn.secondary}>
-            <Plus className="h-4 w-4 text-brand dark:text-brand-dark" aria-hidden />
-            Add task
+      {/* One toolbar row: actions left; who's driving + legend right. */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setModal({ kind: 'create', status: 'todo' })} className={btn.primary}>
+            <Plus className="h-4 w-4" aria-hidden />
+            New task
           </button>
           <button type="button" onClick={() => setModal({ kind: 'pick' })} className={btn.secondary} disabled={tasks.length === 0}>
-            <Pencil className="h-4 w-4 text-brand dark:text-brand-dark" aria-hidden />
+            <Pencil className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
             Edit task
           </button>
         </div>
-        <ul aria-label="Task urgency" className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-          {URGENCY_LEGEND.map((item) => (
-            <li key={item.label} className="flex items-center gap-1.5">
-              <span className={`h-2.5 w-2.5 rounded-full ${item.dot}`} aria-hidden />
-              {item.label}
-            </li>
-          ))}
-        </ul>
+
+        <div className="flex flex-wrap items-center gap-5">
+          {driving.length > 0 && (
+            <ul aria-label="Who's driving what" className="flex items-center gap-1.5">
+              {driving.map((d) => (
+                <li
+                  key={d.name}
+                  title={`${d.name} · ${d.count} open`}
+                  className="inline-flex h-6 items-center gap-1 border border-line bg-surface pl-0.5 pr-2 text-[12px] font-medium text-fg-muted"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-avatar text-[9px] font-semibold text-fg-muted" aria-hidden>
+                    {initials(d.name)}
+                  </span>
+                  <span className="tabular">{d.count}</span>
+                  <span className="sr-only">{`${d.name}: ${d.count} open`}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ul aria-label="Task urgency" className="flex flex-wrap items-center gap-3.5 text-[12px] text-fg-subtle">
+            {URGENCY_LEGEND.map((item) => (
+              <li key={item.label} className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${item.dot}`} aria-hidden />
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
-      {driving.length > 0 && (
-        <section aria-label="Who's driving what" className="mb-5 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Driving</span>
-          {driving.map((d) => (
-            <span
-              key={d.name}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white py-0.5 pl-0.5 pr-2.5 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[9px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200" aria-hidden>
-                {initials(d.name)}
-              </span>
-              {d.name}
-              <span className="text-slate-400">
-                · {d.count} open
-              </span>
-            </span>
-          ))}
-        </section>
-      )}
-
       {error && (
-        <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+        <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
           {error}
         </p>
       )}
@@ -247,7 +307,7 @@ export default function Board({
           },
         }}
       >
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {STAGES.map((stage) => (
             <Column
               key={stage.id}
@@ -255,6 +315,10 @@ export default function Board({
               label={stage.label}
               tasks={tasks.filter((t) => t.status === stage.id)}
               labelOf={labelOf}
+              blockedIds={blockedIds}
+              settledId={settledId}
+              glowId={glowId}
+              projectCode={projectCode}
               onOpen={open}
               onAdd={() => setModal({ kind: 'create', status: stage.id })}
             />
@@ -262,12 +326,12 @@ export default function Board({
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {activeTask && <TaskCardBody task={activeTask} label={labelOf(activeTask)} lifted />}
+          {activeTask && <TaskCardBody task={activeTask} label={labelOf(activeTask)} blocked={blockedIds.has(activeTask.id)} lifted />}
         </DragOverlay>
       </DndContext>
 
       {modal?.kind === 'create' && (
-        <Modal labelledBy="new-task" onClose={close}>
+        <Modal labelledBy="new-task" onClose={close} size="lg">
           <TaskForm {...formProps} defaultStatus={modal.status} onDone={close} onCancel={close} />
         </Modal>
       )}
@@ -282,7 +346,7 @@ export default function Board({
         </Modal>
       )}
       {modal?.kind === 'view' && modalTask && (
-        <Modal labelledBy={`task-title-${modalTask.id}`} onClose={close}>
+        <Modal labelledBy={`task-title-${modalTask.id}`} onClose={close} size="lg">
           <TaskDetails
             task={modalTask}
             taskLabel={labelOf(modalTask)}
@@ -290,13 +354,16 @@ export default function Board({
             members={members}
             handingOff={handingOff}
             onHandOff={(assignee) => handOff(modalTask, assignee)}
+            allTasks={tasks}
+            onOpenTask={(id) => setModal({ kind: 'view', id })}
+            blockerControls={blockerHandlers(modalTask)}
             onEdit={() => setModal({ kind: 'edit', id: modalTask.id, from: 'view' })}
             onClose={close}
           />
         </Modal>
       )}
       {modal?.kind === 'edit' && modalTask && (
-        <Modal labelledBy={`edit-task-${modalTask.id}`} onClose={close}>
+        <Modal labelledBy={`edit-task-${modalTask.id}`} onClose={close} size="lg">
           <TaskForm
             {...formProps}
             task={modalTask}
@@ -306,6 +373,7 @@ export default function Board({
         </Modal>
       )}
 
+      <TotalContext project={project} tasks={tasks} labels={labels} />
       <Toast toast={toast} onDone={clearToast} />
     </>
   );
@@ -316,6 +384,10 @@ function Column({
   label,
   tasks,
   labelOf,
+  blockedIds,
+  settledId,
+  glowId,
+  projectCode,
   onOpen,
   onAdd,
 }: {
@@ -323,36 +395,66 @@ function Column({
   label: string;
   tasks: BoardTask[];
   labelOf: (task: BoardTask) => Label | undefined;
+  blockedIds: Set<string>;
+  settledId: string | null;
+  glowId: string | null;
+  projectCode: string;
   onOpen: (id: string) => void;
   onAdd: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
+  // Column = soft tray. Header: stage dot · name · count · "+" (add to this column).
   return (
-    <section aria-labelledby={`col-${id}`} className="flex min-w-0 flex-col">
-      <h2 id={`col-${id}`} className="px-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-700 dark:text-slate-200">
-        {label} <span className="font-normal text-slate-400">({tasks.length})</span>
-      </h2>
-      <div className={`mb-4 mt-3 h-[3px] rounded-full ${STAGE_BAR[id]}`} />
-
-      {/* Drop zone: highlights while a ticket is dragged over it. */}
-      <div
-        ref={setNodeRef}
-        className={`-m-1.5 flex min-h-[120px] flex-1 flex-col gap-2 rounded-lg p-1.5 transition-colors ${
-          isOver ? 'bg-brand/[0.07] ring-2 ring-inset ring-brand/40 dark:bg-brand-dark/10' : ''
-        }`}
-      >
-        {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} label={labelOf(task)} onOpen={() => onOpen(task.id)} />
-        ))}
+    <section
+      ref={setNodeRef}
+      aria-labelledby={`col-${id}`}
+      className={`flex min-h-[280px] min-w-0 flex-col rounded-xl p-2 ${
+        isOver
+          ? 'border border-brand bg-brand-soft'
+          : 'border border-line bg-sunken'
+      }`}
+    >
+      <div className="-mx-2 -mt-2 mb-2 flex h-10 items-center gap-2 border-b border-line px-3">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${STAGE_BAR[id]}`} aria-hidden />
+        <h2 id={`col-${id}`} className="text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
+          {label}
+        </h2>
+        <span className="tabular text-[12px] text-fg-subtle">{tasks.length}</span>
         <button
           type="button"
           onClick={onAdd}
-          className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-brand-dark"
+          aria-label={`Add task to ${label}`}
+          title={`Add task to ${label}`}
+          className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle hover:bg-surface hover:text-fg hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <Plus className="h-4 w-4" aria-hidden />
-          Add task
         </button>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2">
+        {tasks.map((task) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            label={labelOf(task)}
+            blocked={blockedIds.has(task.id)}
+            settle={settledId === task.id}
+            glow={glowId === task.id}
+            projectCode={projectCode}
+            onOpen={() => onOpen(task.id)}
+          />
+        ))}
+        {tasks.length === 0 && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="flex h-[84px] items-center justify-center gap-1.5 rounded-lg border border-dashed border-line-strong text-[12px] text-fg-subtle hover:border-line-strong hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Add task
+          </button>
+        )}
       </div>
     </section>
   );

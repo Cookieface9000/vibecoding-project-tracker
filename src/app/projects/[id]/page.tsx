@@ -5,6 +5,7 @@ import DeliverablesBar from '@/components/DeliverablesBar';
 import Notice, { SetupNotice } from '@/components/Notice';
 import ProjectHeader from '@/components/ProjectHeader';
 import { getDeliverables, getProject, listLabels, listMembers, listTasks } from '@/lib/data';
+import { averageHealth } from '@/lib/health';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import type { BoardTask, Deliverables, Label, Member, Project } from '@/lib/types';
 
@@ -49,10 +50,18 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   return (
     <AppShell activeProjectId={project.id}>
-      <ProjectHeader project={project} />
-      <main className="flex-1 p-6">
+      <ProjectHeader project={project} active="board" health={averageHealth(tasks)} />
+      {/* pr-16 keeps the board clear of the pinned "Total context" tab on the right edge. */}
+      <main className="flex-1 py-5 pl-6 pr-16">
         <DeliverablesBar projectId={project.id} links={links} />
-        <Board tasks={tasks} members={members} labels={labels} projectId={project.id} projectCode={project.code} />
+        <Board
+          tasks={tasks}
+          members={members}
+          labels={labels}
+          projectId={project.id}
+          projectCode={project.code}
+          project={{ name: project.name, code: project.code, client: project.client, description: project.description, teamName: project.teamName }}
+        />
       </main>
     </AppShell>
   );

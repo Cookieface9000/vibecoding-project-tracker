@@ -6,7 +6,7 @@ import Modal, { ModalHeader } from '../Modal';
 import AccessibilityTab from './AccessibilityTab';
 import ProfileTab from './ProfileTab';
 import ShortcutsTab from './ShortcutsTab';
-import { CreateTeamTab, TeamsTab, type Team } from './TeamsTabs';
+import { CreateTeamTab, TeamsTab } from './TeamsTabs';
 
 export type SettingsTab = 'profile' | 'teams' | 'create-team' | 'accessibility' | 'shortcuts';
 
@@ -18,12 +18,9 @@ const TABS: { id: SettingsTab; label: string; Icon: typeof User }[] = [
   { id: 'shortcuts', label: 'Keyboard shortcuts', Icon: Keyboard },
 ];
 
-// Placeholder team data until accounts exist.
-const INITIAL_TEAMS: Team[] = [{ name: 'Platform Team', code: 'VT-PLAT', members: 5, current: true }];
 
 export default function SettingsModal({ initialTab, onClose }: { initialTab: SettingsTab; onClose: () => void }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Arrow keys move between tabs (WAI-ARIA tabs pattern, vertical).
@@ -45,7 +42,7 @@ export default function SettingsModal({ initialTab, onClose }: { initialTab: Set
           role="tablist"
           aria-orientation="vertical"
           aria-label="Settings sections"
-          className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 p-2 dark:border-slate-700 sm:w-52 sm:flex-col sm:border-b-0 sm:border-r"
+          className="flex shrink-0 gap-1 overflow-x-auto border-b border-line p-2 sm:w-52 sm:flex-col sm:border-b-0 sm:border-r"
         >
           {TABS.map((t, i) => {
             const selected = t.id === tab;
@@ -62,10 +59,10 @@ export default function SettingsModal({ initialTab, onClose }: { initialTab: Set
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setTab(t.id)}
                 onKeyDown={(e) => onTabKeyDown(e, i)}
-                className={`flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                className={`flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   selected
-                    ? 'bg-brand/10 font-medium text-brand dark:bg-brand-dark/15 dark:text-brand-dark'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'bg-brand-soft font-medium text-brand-ink'
+                    : 'text-fg-muted hover:bg-hover'
                 }`}
               >
                 <t.Icon className="h-4 w-4 shrink-0" aria-hidden />
@@ -83,8 +80,8 @@ export default function SettingsModal({ initialTab, onClose }: { initialTab: Set
           className="min-h-0 flex-1 overflow-y-auto p-6 focus-visible:outline-none"
         >
           {tab === 'profile' && <ProfileTab />}
-          {tab === 'teams' && <TeamsTab teams={teams} setTeams={setTeams} />}
-          {tab === 'create-team' && <CreateTeamTab setTeams={setTeams} onViewTeams={() => setTab('teams')} />}
+          {tab === 'teams' && <TeamsTab />}
+          {tab === 'create-team' && <CreateTeamTab onViewTeams={() => setTab('teams')} />}
           {tab === 'accessibility' && <AccessibilityTab />}
           {tab === 'shortcuts' && <ShortcutsTab />}
         </div>

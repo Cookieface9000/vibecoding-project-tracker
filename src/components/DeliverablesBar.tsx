@@ -1,125 +1,173 @@
 'use client';
 
-import { BookOpen, ExternalLink, FileText, MonitorPlay, Presentation, type LucideIcon } from 'lucide-react';
-import { useEffect, useState, useTransition } from 'react';
+import { BookOpen, ExternalLink, FileText, MonitorPlay, Pencil, Plus, Presentation, type LucideIcon } from 'lucide-react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { setDeliverable } from '@/app/actions';
 import { DELIVERABLES, type DeliverableKind, type Deliverables } from '@/lib/types';
 
 const SLOTS: Record<DeliverableKind, { label: string; Icon: LucideIcon; placeholder: string }> = {
-  presentation: { label: 'Presentation', Icon: Presentation, placeholder: 'Link to slides' },
-  demo: { label: 'Demo', Icon: MonitorPlay, placeholder: 'Link to live demo' },
-  report: { label: 'Report', Icon: FileText, placeholder: 'Link to report' },
-  documentation: { label: 'Documentation', Icon: BookOpen, placeholder: 'Link to docs' },
+  presentation: { label: 'Presentation', Icon: Presentation, placeholder: 'https://slides…' },
+  demo: { label: 'Demo', Icon: MonitorPlay, placeholder: 'https://demo…' },
+  report: { label: 'Report', Icon: FileText, placeholder: 'https://report…' },
+  documentation: { label: 'Documentation', Icon: BookOpen, placeholder: 'https://docs…' },
 };
 
-// M11: four pinned project links above the board. Saves on Enter or when the field loses focus.
+function displayHost(url: string) {
+  try {
+    const u = new URL(url);
+    return u.host.replace(/^www\./, '') + (u.pathname !== '/' ? u.pathname : '');
+  } catch {
+    return url;
+  }
+}
+
+// M11: four pinned project links in one compact, segmented bar.
 export default function DeliverablesBar({ projectId, links }: { projectId: string; links: Deliverables }) {
   const set = DELIVERABLES.filter((k) => links[k]).length;
 
   return (
-    <section aria-labelledby="deliverables-title" className="mb-6">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 id="deliverables-title" className="text-[13px] font-semibold uppercase tracking-[0.08em] text-slate-700 dark:text-slate-200">
+    <section aria-labelledby="deliverables-title" className="mb-5">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 id="deliverables-title" className="text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">
           Project links
         </h2>
-        <span className="text-xs text-slate-500 dark:text-slate-400">
-          {set} of {DELIVERABLES.length} added
+        <span className="tabular text-[12px] text-fg-subtle">
+          {set}/{DELIVERABLES.length}
         </span>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {DELIVERABLES.map((kind) => (
-          <Slot key={kind} projectId={projectId} kind={kind} saved={links[kind]} />
+      <div className="grid grid-cols-1 overflow-hidden rounded-lg border border-line bg-surface shadow-card sm:grid-cols-2 xl:grid-cols-4">
+        {DELIVERABLES.map((kind, i) => (
+          <Slot key={kind} projectId={projectId} kind={kind} saved={links[kind]} first={i === 0} />
         ))}
       </div>
     </section>
   );
 }
 
-function Slot({ projectId, kind, saved }: { projectId: string; kind: DeliverableKind; saved: string }) {
+function Slot({ projectId, kind, saved, first }: { projectId: string; kind: DeliverableKind; saved: string; first: boolean }) {
   const slot = SLOTS[kind];
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(saved);
-  const [status, setStatus] = useState<{ kind: 'saving' | 'saved' | 'error'; text?: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Pick up fresh server data (e.g. after a save elsewhere) unless the user is mid-edit.
   useEffect(() => setValue(saved), [saved]);
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   const filled = Boolean(saved);
   const inputId = `link-${kind}`;
   const statusId = `link-${kind}-status`;
 
   function save() {
-    if (value.trim() === saved) return;
-    setStatus({ kind: 'saving' });
+    if (value.trim() === saved) {
+      setEditing(false);
+      return;
+    }
     startTransition(async () => {
       const result = await setDeliverable(projectId, kind, value);
       if (result.ok) {
         setValue(value.trim());
-        setStatus({ kind: 'saved' });
-        setTimeout(() => setStatus(null), 2000);
+        setError(null);
+        setEditing(false);
       } else {
-        setStatus({ kind: 'error', text: result.error });
+        setError(result.error);
       }
     });
   }
 
+  function cancel() {
+    setValue(saved);
+    setError(null);
+    setEditing(false);
+  }
+
   return (
     <div
-      className={`rounded-lg border bg-surface-card p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)] dark:bg-surface-card-dark ${
-        status?.kind === 'error' ? 'border-red-300 dark:border-red-500/50' : 'border-slate-200 dark:border-slate-700/70'
-      }`}
+      className={`flex min-h-[64px] flex-col justify-center gap-1 px-3.5 py-2.5 ${
+        first ? '' : 'border-t border-line sm:border-l sm:border-t-0'
+      } ${error ? 'bg-red-50/60 dark:bg-red-500/[0.06]' : ''}`}
     >
-      <div className="mb-2 flex items-center gap-2">
-        <slot.Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" aria-hidden />
-        <label htmlFor={inputId} className="text-sm font-medium text-slate-800 dark:text-slate-100">
+      <div className="flex items-center gap-2">
+        <slot.Icon className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
+        <label htmlFor={inputId} className="text-[12px] font-medium text-fg-muted">
           {slot.label}
         </label>
         {/* Status dot: hollow = empty, filled = link added. Text says the same for screen readers. */}
         <span
-          className={`ml-auto h-3 w-3 rounded-full border-2 ${filled ? 'border-brand bg-brand dark:border-brand-dark dark:bg-brand-dark' : 'border-slate-300 dark:border-slate-600'}`}
+          className={`ml-auto h-2 w-2 rounded-full ${filled ? 'bg-brand' : 'border border-line-strong'}`}
           aria-hidden
         />
         <span className="sr-only">{filled ? 'Link added' : 'No link yet'}</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <input
-          id={inputId}
-          type="url"
-          inputMode="url"
-          value={value}
-          placeholder={slot.placeholder}
-          onChange={(e) => {
-            setValue(e.target.value);
-            if (status?.kind === 'error') setStatus(null);
-          }}
-          onBlur={save}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              save();
-            }
-            if (e.key === 'Escape') setValue(saved);
-          }}
-          disabled={pending}
-          aria-describedby={statusId}
-          aria-invalid={status?.kind === 'error'}
-          className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        />
-        {filled && (
+
+      {editing ? (
+        <div>
+          <input
+            ref={inputRef}
+            id={inputId}
+            type="url"
+            inputMode="url"
+            value={value}
+            placeholder={slot.placeholder}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setError(null);
+            }}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                save();
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            disabled={pending}
+            aria-describedby={statusId}
+            aria-invalid={Boolean(error)}
+            className="block w-full rounded border border-line bg-surface px-2 py-1 text-[12px] text-fg placeholder:text-fg-subtle focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-60"
+          />
+          <p id={statusId} aria-live="polite" className={`mt-1 text-[11px] ${error ? 'text-red-700 dark:text-red-300' : 'text-fg-subtle'}`}>
+            {pending ? 'Saving…' : error ?? 'Enter to save · Esc to cancel'}
+          </p>
+        </div>
+      ) : filled ? (
+        <div className="flex min-w-0 items-center gap-1">
           <a
             href={saved}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Open ${slot.label} link in a new tab`}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-brand-dark"
+            className="group inline-flex min-w-0 items-center gap-1 text-[12px] text-fg-muted hover:text-fg"
           >
-            <ExternalLink className="h-4 w-4" aria-hidden />
+            <span className="truncate">{displayHost(saved)}</span>
+            <ExternalLink className="h-3 w-3 shrink-0 text-fg-subtle group-hover:text-fg-muted" aria-hidden />
+            <span className="sr-only">(opens in a new tab)</span>
           </a>
-        )}
-      </div>
-      <p id={statusId} aria-live="polite" className={`mt-1 min-h-[1rem] text-[11px] ${status?.kind === 'error' ? 'text-red-700 dark:text-red-300' : 'text-slate-400'}`}>
-        {status?.kind === 'saving' ? 'Saving…' : status?.kind === 'saved' ? 'Saved' : status?.kind === 'error' ? status.text : filled ? '' : 'Enter to save'}
-      </p>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label={`Edit ${slot.label} link`}
+            className="ml-auto rounded p-1 text-fg-subtle hover:bg-hover hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <Pencil className="h-3 w-3" aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          id={inputId}
+          onClick={() => setEditing(true)}
+          className="inline-flex w-fit items-center gap-1 rounded text-[12px] text-fg-subtle hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          <Plus className="h-3 w-3" aria-hidden />
+          Add link
+        </button>
+      )}
     </div>
   );
 }

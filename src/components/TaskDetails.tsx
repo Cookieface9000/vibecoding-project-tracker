@@ -1,6 +1,10 @@
 'use client';
 
-import { CalendarDays, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Circle, Gauge, GitBranch, History, Lock, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
+import { HEALTH_LABEL, contextHealth, healthBand } from '@/lib/health';
+import { isBlocked } from '@/lib/blocking';
+import BlockerManager, { type BlockerControls } from './BlockerManager';
+import HealthMeter from './HealthMeter';
 import { formatBriefing, hasContext } from '@/lib/context';
 import { dueLabel, dueState } from '@/lib/due';
 import { STAGES, type BoardTask, type Label, type Member } from '@/lib/types';
@@ -33,6 +37,9 @@ export default function TaskDetails({
   taskLabel,
   projectCode,
   members,
+  allTasks,
+  onOpenTask,
+  blockerControls,
   handingOff = false,
   onHandOff,
   onEdit,
@@ -42,6 +49,9 @@ export default function TaskDetails({
   taskLabel?: Label;
   projectCode: string;
   members: Member[];
+  allTasks: BoardTask[];
+  onOpenTask: (id: string) => void;
+  blockerControls: BlockerControls;
   handingOff?: boolean;
   onHandOff: (assignee: string) => void;
   onEdit: () => void;
@@ -52,6 +62,11 @@ export default function TaskDetails({
   const due = DUE_STYLE[state];
   const label = dueLabel(task);
   const stage = STAGES.find((s) => s.id === task.status);
+  const health = contextHealth(task);
+  const byId = new Map(allTasks.map((t) => [t.id, t]));
+  const blockers = task.blockers.filter((b) => byId.has(b.taskId));
+  const blocked = isBlocked(task, byId);
+  const blocks = allTasks.filter((t) => t.dependsOn.includes(task.id));
 
   return (
     <>
@@ -59,7 +74,7 @@ export default function TaskDetails({
         id={`task-title-${task.id}`}
         eyebrow={
           <>
-            <span className="font-mono text-slate-500 dark:text-slate-400">#{projectCode}</span>
+            <span className="font-mono text-fg-subtle">#{projectCode}</span>
             <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-medium uppercase tracking-wide ${type.chip}`}>
               <type.Icon className="h-3 w-3" aria-hidden />
               {type.label}
@@ -81,7 +96,7 @@ export default function TaskDetails({
           </Fact>
           <Fact label="Assignee" icon={User}>
             <span className="inline-flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-avatar text-[10px] font-semibold text-fg-muted">
                 {initials(task.assignee)}
               </span>
               {task.assignee}
@@ -94,7 +109,7 @@ export default function TaskDetails({
               value=""
               disabled={handingOff}
               onChange={(e) => e.target.value && onHandOff(e.target.value)}
-              className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="mt-2 block w-full rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-fg-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-60"
             >
               <option value="">{handingOff ? 'Handing off…' : 'Hand off to…'}</option>
               {members
@@ -110,7 +125,7 @@ export default function TaskDetails({
             {task.dueDate ? (
               <span className="inline-flex flex-wrap items-center gap-2">
                 {formatDate(task.dueDate)}
-                {task.dueTime && <span className="text-slate-500 dark:text-slate-400">{task.dueTime}</span>}
+                {task.dueTime && <span className="text-fg-subtle">{task.dueTime}</span>}
                 {label && (
                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${due.chip}`}>
                     <due.Icon className="h-3 w-3" aria-hidden />
@@ -119,7 +134,7 @@ export default function TaskDetails({
                 )}
               </span>
             ) : (
-              <span className="text-slate-400">No due date</span>
+              <span className="text-fg-subtle">No due date</span>
             )}
           </Fact>
           <Fact label="Label" icon={Tag}>
@@ -129,20 +144,46 @@ export default function TaskDetails({
                 {taskLabel.name}
               </span>
             ) : (
-              <span className="text-slate-400">No label</span>
+              <span className="text-fg-subtle">No label</span>
             )}
           </Fact>
           <Fact label="Created" icon={CalendarDays}>
             {formatDate(task.createdDate)}
           </Fact>
           <Fact label="AI tool" icon={MessageSquareText}>
-            {task.contextTool ?? <span className="text-slate-400">None</span>}
+            {task.contextTool ?? <span className="text-fg-subtle">None</span>}
           </Fact>
         </dl>
 
+        {/* Context health: what makes this task ready to hand to someone (or an AI) else. */}
+        <Section title="Context health" icon={Gauge} aside={`${health.score}/100 · ${HEALTH_LABEL[healthBand(health.score)]}`}>
+          <div className="mb-3"><HealthMeter score={health.score} label={false} /></div>
+          <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-3">
+            {health.checks.map((c) => (
+              <li key={c.id} className={`flex items-center gap-1.5 ${c.met ? 'text-fg' : 'text-fg-subtle'}`}>
+                {c.met ? <CheckCircle2 className="h-3.5 w-3.5 text-brand-ink" aria-hidden /> : <Circle className="h-3.5 w-3.5" aria-hidden />}
+                {c.label}
+                <span className="sr-only">{c.met ? '(done)' : '(missing)'}</span>
+                <span className="ml-auto tabular text-[11px] text-fg-subtle">+{c.points}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section
+          title="Dependencies"
+          icon={GitBranch}
+          aside={blocked ? 'Blocked' : blockers.length ? 'Not blocked' : undefined}
+        >
+          <BlockerManager task={task} allTasks={allTasks} onOpenTask={onOpenTask} controls={blockerControls} />
+          <div className="mt-5">
+            <DependencyList title="Blocks" tasks={blocks} onOpenTask={onOpenTask} empty="Nothing waits on this task." />
+          </div>
+        </Section>
+
         {task.description && (
           <Section title="Description">
-            <p className="text-sm leading-6 text-slate-700 dark:text-slate-300">{task.description}</p>
+            <p className="text-sm leading-6 text-fg-muted">{task.description}</p>
           </Section>
         )}
 
@@ -157,7 +198,7 @@ export default function TaskDetails({
         >
           {hasContext(task.context) ? (
             <>
-            <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-mono text-xs leading-5 text-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+            <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted p-3 font-mono text-xs leading-5 text-fg-muted">
               {task.context}
             </pre>
             <div className="mt-2 flex justify-end">
@@ -173,13 +214,13 @@ export default function TaskDetails({
           {task.prompts.length === 0 ? (
             <Empty>No prompts logged for this task yet.</Empty>
           ) : (
-            <ol className="relative space-y-3 border-l border-slate-200 pl-5 dark:border-slate-700">
+            <ol className="relative space-y-3 border-l border-line pl-5">
               {task.prompts.map((p) => (
                 <li key={p.id} className="relative">
-                  <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-brand dark:border-surface-card-dark" aria-hidden />
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-raised bg-brand" aria-hidden />
+                  <div className="flex items-center gap-2 text-xs text-fg-subtle">
                     {p.tool && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 dark:bg-slate-700/60 dark:text-slate-200">
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                         {p.tool}
                       </span>
                     )}
@@ -187,7 +228,7 @@ export default function TaskDetails({
                       {timeAgo(p.createdAt)}
                     </time>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-2.5 font-mono text-xs leading-5 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                  <p className="mt-1 whitespace-pre-wrap rounded-lg border border-line bg-surface p-2.5 font-mono text-xs leading-5 text-fg-muted">
                     {p.prompt}
                   </p>
                 </li>
@@ -197,7 +238,7 @@ export default function TaskDetails({
         </Section>
       </div>
 
-      <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+      <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
         <button type="button" onClick={onClose} className={btn.secondary}>
           Close
         </button>
@@ -213,11 +254,11 @@ export default function TaskDetails({
 function Fact({ label, icon: Icon, children }: { label: string; icon?: typeof User; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <dt className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-fg-subtle">
         {Icon && <Icon className="h-3.5 w-3.5" aria-hidden />}
         {label}
       </dt>
-      <dd className="mt-1 text-slate-900 dark:text-slate-100">{children}</dd>
+      <dd className="mt-1 text-fg">{children}</dd>
     </div>
   );
 }
@@ -236,11 +277,11 @@ function Section({
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           {Icon && <Icon className="h-3.5 w-3.5" aria-hidden />}
           {title}
         </h3>
-        {aside && <span className="text-xs text-slate-400">{aside}</span>}
+        {aside && <span className="text-xs text-fg-subtle">{aside}</span>}
       </div>
       {children}
     </section>
@@ -249,8 +290,49 @@ function Section({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+    <p className="rounded-lg border border-dashed border-line-strong px-3 py-4 text-center text-xs text-fg-subtle">
       {children}
     </p>
+  );
+}
+
+function DependencyList({
+  title,
+  tasks,
+  empty,
+  onOpenTask,
+}: {
+  title: string;
+  tasks: BoardTask[];
+  empty: string;
+  onOpenTask: (id: string) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[12px] font-medium text-fg-muted">{title}</p>
+      {tasks.length === 0 ? (
+        <p className="text-[13px] text-fg-subtle">{empty}</p>
+      ) : (
+        <ul className="space-y-1">
+          {tasks.map((t) => {
+            const open = t.status !== 'done';
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(t.id)}
+                  className="flex w-full items-center gap-2 border border-line px-2 py-1.5 text-left text-[13px] hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${STAGE_DOT[t.status]}`} aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-fg">{t.title}</span>
+                  {title === 'Blocked by' && open && <Lock className="h-3.5 w-3.5 shrink-0 text-ink-overdue" aria-label="Still blocking" />}
+                  <span className="shrink-0 text-[11px] text-fg-subtle">{STAGES.find((s) => s.id === t.status)?.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

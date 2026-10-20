@@ -7,6 +7,7 @@ export const SHORTCUT_ACTIONS = [
   { id: 'newProject', label: 'New project', default: 'c' },
   { id: 'allProjects', label: 'Go to all projects', default: 'g' },
   { id: 'toggleTheme', label: 'Toggle light / dark mode', default: 't' },
+  { id: 'openGuide', label: 'Open the guide', default: 'h' },
   { id: 'openSettings', label: 'Open settings', default: ',' },
   { id: 'showShortcuts', label: 'Show keyboard shortcuts', default: '?' },
 ] as const;
