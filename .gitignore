@@ -7,3 +7,7 @@ dist
 .idea
 .vscode
 *.log
+
+# Local-only: screenshots + prototype spec (never commit)
+ss/
+PROTOTYPE.md
