@@ -101,11 +101,11 @@ export default async function AppShell({
             )}
           </Collapsible>
 
-          {/* Teams: teams you own, then teams owned by someone else. */}
+          {/* Team projects: grouped by team, teams you own first, then teams owned by someone else. */}
           <Collapsible
             variant="sidebar"
             storageKey="side.teams"
-            title="Teams"
+            title="Team projects"
             meta={<span className="tabular text-[10px] text-sidebar-fg-muted">{teams.length}</span>}
           >
             {teams.length === 0 && <p className="px-2 py-1 text-[12px] text-sidebar-fg-muted">Not in any teams</p>}

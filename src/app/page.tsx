@@ -98,7 +98,7 @@ function GroupedProjects({ projects, teams }: { projects: ProjectSummary[]; team
         title={
           <span className="flex items-center gap-2">
             <Users className="h-4 w-4 text-fg-subtle" aria-hidden />
-            Teams
+            Team projects
           </span>
         }
         meta={<span className="text-[12px] text-fg-subtle">{count(teams.length, 'team')}</span>}
