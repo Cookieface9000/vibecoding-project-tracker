@@ -156,6 +156,7 @@ function ProjectLinks({ projects }: { projects: Project[] }) {
             id={project.id}
             code={project.code}
             name={project.name}
+            mcp={project.isDemo}
             title={project.isMine ? project.name : `${project.name} · by ${project.createdBy ?? 'a teammate'}`}
           />
         </li>

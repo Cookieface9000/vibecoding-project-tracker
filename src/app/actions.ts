@@ -288,6 +288,21 @@ export async function handOffTask(id: string, projectId: string, assignee: strin
   });
 }
 
+/** Add a prompt you used to the task's prompt history (the same history AI connections write to). */
+export async function logPrompt(taskId: string, projectId: string, rawPrompt: string, tool: string | null): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(taskId)) throw new InvalidInput('Invalid task.');
+    const prompt = rawPrompt.trim();
+    if (!prompt) throw new InvalidInput('Paste the prompt first.');
+    if (prompt.length > 20000) throw new InvalidInput('Prompts must be 20,000 characters or fewer.');
+    if (tool && !CONTEXT_TOOLS.includes(tool as (typeof CONTEXT_TOOLS)[number])) throw new InvalidInput('Choose a valid AI tool.');
+    const db = supabase();
+    const { data: task } = await db.from('tasks').select('id').eq('id', taskId).eq('project_id', projectId).maybeSingle();
+    if (!task) throw new InvalidInput('That task is no longer on this board.');
+    return db.from('task_prompts').insert({ task_id: taskId, tool: tool || null, prompt });
+  });
+}
+
 export async function deleteTask(id: string, projectId: string): Promise<ActionResult> {
   return run(projectId, async () => {
     if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');

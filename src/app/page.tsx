@@ -179,7 +179,17 @@ function ProjectList({ projects }: { projects: ProjectSummary[] }) {
                     {project.code.slice(0, 3)}
                   </span>
                   <div className="min-w-0">
-                    <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-fg">{project.name}</h2>
+                    <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-fg">
+                      <span className="truncate">{project.name}</span>
+                      {project.isDemo && (
+                        <span
+                          className="shrink-0 rounded border border-brand/50 px-1.5 font-mono text-[10px] font-semibold leading-4 tracking-[0.04em] text-brand-ink"
+                          title="Try the AI (MCP) connection on this board"
+                        >
+                          MCP
+                        </span>
+                      )}
+                    </h2>
                     <p className="truncate text-[12px] text-fg-subtle">
                       #{project.code}
                       {project.client && ` · ${project.client}`}

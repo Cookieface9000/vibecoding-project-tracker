@@ -222,7 +222,9 @@ export default function GuidePage() {
               one Markdown briefing. Paste it into Claude, ChatGPT, Cursor or a message to a teammate and carry on.
             </Feature>
             <Feature icon={History} title="Prompt history">
-              Each task keeps a timeline of the prompts used on it, newest first, so you can see how the work got where it is.
+              Each task keeps a timeline of the prompts used on it, newest first, so you can see how the work got where it is. Open
+              a task and use <strong className="text-fg">Log a prompt</strong> to paste one in and tag the AI tool; a connected AI
+              can also log its own prompts.
             </Feature>
           </Section>
 

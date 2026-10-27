@@ -26,8 +26,11 @@ export function NavLink({ href, nested = false, className = '', children }: { hr
   );
 }
 
-/** A project in the sidebar: code badge + name. Also active on the project's Insights page. */
-export function ProjectLink({ id, code, name, title }: { id: string; code: string; name: string; title: string }) {
+/**
+ * A project in the sidebar: code badge + name. Also active on the project's Insights page.
+ * `mcp` marks the Demo Board, the board set up for trying the AI (MCP) connection.
+ */
+export function ProjectLink({ id, code, name, title, mcp = false }: { id: string; code: string; name: string; title: string; mcp?: boolean }) {
   const href = `/projects/${id}`;
   const active = useActive(href, true);
   return (
@@ -41,6 +44,14 @@ export function ProjectLink({ id, code, name, title }: { id: string; code: strin
         {code.slice(0, 2)}
       </span>
       <span className="truncate">{name}</span>
+      {mcp && (
+        <span
+          className="ml-auto shrink-0 rounded border border-brand/50 px-1 font-mono text-[9px] font-semibold leading-4 tracking-[0.04em] text-brand"
+          title="Try the AI (MCP) connection on this board"
+        >
+          MCP
+        </span>
+      )}
     </Link>
   );
 }

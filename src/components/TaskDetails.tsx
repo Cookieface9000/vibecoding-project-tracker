@@ -1,10 +1,12 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { CalendarDays, CheckCircle2, Circle, Gauge, GitBranch, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
 import { HEALTH_LABEL, contextHealth, healthBand } from '@/lib/health';
 import { isBlocked } from '@/lib/blocking';
 import BlockerManager, { type BlockerControls } from './BlockerManager';
 import HealthMeter from './HealthMeter';
+import PromptLogger from './PromptLogger';
 import { formatBriefing, hasContext } from '@/lib/context';
 import { dueLabel, dueState } from '@/lib/due';
 import { STAGES, type BoardTask, type Label, type Member } from '@/lib/types';
@@ -32,7 +34,7 @@ function timeAgo(iso: string) {
 }
 
 // Ticket view shown when a card is clicked. Everything is read-only except
-// "Hand off to…", which reassigns in one step.
+// "Hand off to…" (reassigns in one step), blockers, and "Log a prompt".
 export default function TaskDetails({
   task,
   taskLabel,
@@ -58,6 +60,7 @@ export default function TaskDetails({
   onEdit: () => void;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const type = TYPE_STYLE[task.type];
   const state = dueState(task);
   const due = DUE_STYLE[state];
@@ -205,9 +208,10 @@ export default function TaskDetails({
           )}
         </Section>
 
-        <Section title="Prompt history" icon={History} aside={task.prompts.length ? `${task.prompts.length} prompts` : undefined}>
+        <Section title="Prompt history" icon={History} aside={task.prompts.length ? `${task.prompts.length} ${task.prompts.length === 1 ? 'prompt' : 'prompts'}` : undefined}>
+          <PromptLogger taskId={task.id} projectId={task.projectId} defaultTool={task.contextTool} onLogged={() => router.refresh()} />
           {task.prompts.length === 0 ? (
-            <Empty>No prompts logged for this task yet.</Empty>
+            <Empty>No prompts logged yet. Paste the prompts you used with an AI to keep a record of how this task was built.</Empty>
           ) : (
             <ol className="relative space-y-3 border-l border-line pl-5">
               {task.prompts.map((p) => (

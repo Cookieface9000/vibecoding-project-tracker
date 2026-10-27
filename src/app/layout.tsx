@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google';
+import { cookies } from 'next/headers';
 import Script from 'next/script';
 import AppShell from '@/components/AppShell';
 import SettingsProvider from '@/components/settings/SettingsProvider';
+import { THEME_COOKIE } from '@/lib/theme';
 import './globals.css';
 
 // UI typeface from the UI/UX Pro Max design system: friendly, modern, professional.
@@ -14,11 +16,14 @@ export const metadata: Metadata = {
 };
 
 // Applies saved (or OS) theme and accessibility settings before first paint, so
-// there's no flash of the wrong colours.
+// there's no flash of the wrong colours. The theme is also kept in a cookie (lib/theme.ts),
+// so the server renders it too: it carries through signing out and in, and the sign-in page.
 const initScript = `(() => {
   try {
     const root = document.documentElement;
-    const saved = localStorage.getItem('vibetracker.theme');
+    const cookie = (document.cookie.match(/(?:^|; )vt_theme=(dark|light)/) || [])[1];
+    const saved = localStorage.getItem('vibetracker.theme') || cookie;
+    if (saved && saved !== cookie) document.cookie = 'vt_theme=' + saved + '; path=/; max-age=31536000; samesite=lax';
     const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
     root.classList.toggle('dark', dark);
     const prefs = JSON.parse(localStorage.getItem('vibetracker.prefs') || '{}');
@@ -27,9 +32,10 @@ const initScript = `(() => {
   } catch {}
 })();`;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const dark = (await cookies()).get(THEME_COOKIE)?.value === 'dark';
   return (
-    <html lang="en" suppressHydrationWarning className={`${body.variable} ${mono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${body.variable} ${mono.variable}${dark ? ' dark' : ''}`}>
       <body>
         <Script id="init-prefs" strategy="beforeInteractive">
           {initScript}

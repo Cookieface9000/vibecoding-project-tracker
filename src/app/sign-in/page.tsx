@@ -1,4 +1,5 @@
 import SignInForm from '@/components/SignInForm';
+import ThemeToggle from '@/components/ThemeToggle';
 import { SetupNotice } from '@/components/Notice';
 import { getSignedInUser } from '@/lib/current-user';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -25,7 +26,11 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const users = (data ?? []) as { id: string; name: string; username: string; avatar: string | null }[];
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-10">
+    <main className="relative flex flex-1 items-center justify-center px-4 py-10">
+      {/* Same light/dark switch as the app's top bar; the choice carries over after signing in. */}
+      <div className="absolute right-4 top-3">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-lg">
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand text-[14px] font-bold text-brand-fg" aria-hidden>
