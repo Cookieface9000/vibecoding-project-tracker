@@ -6,7 +6,7 @@ import DemoBoardCard from '@/components/connect/DemoBoardCard';
 import TryIt from '@/components/connect/TryIt';
 import Notice, { SetupNotice } from '@/components/Notice';
 import PageHeader from '@/components/PageHeader';
-import { listMembers, listProjects } from '@/lib/data';
+import { listMembers, listProjects, listTasks } from '@/lib/data';
 import { listConnections, listRecentCalls } from '@/lib/mcp/connections';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
@@ -59,13 +59,15 @@ async function Content() {
       listRecentCalls(30),
       supabase().from('projects').select('id').eq('is_demo', true).order('created_at').limit(1).maybeSingle(),
     ]);
-    data = { projects, members, connections, calls, demoId: (demo.data?.id as string | undefined) ?? null };
+    const boards = await Promise.all(projects.map((p) => listTasks(p)));
+    const taskOptions = boards.flat().map((t) => ({ ref: t.ref, title: t.title }));
+    data = { projects, members, connections, calls, taskOptions, demoId: (demo.data?.id as string | undefined) ?? null };
   } catch (err) {
     return <Notice>{(err as Error).message}. Have you run the latest <code>supabase/schema.sql</code>?</Notice>;
   }
 
   const now = Date.now();
-  const { projects, members, connections, calls, demoId } = data;
+  const { projects, members, connections, calls, taskOptions, demoId } = data;
   const demo = projects.find((p) => p.id === demoId);
   const projectOptions = [...projects].sort((a, b) => Number(b.id === demoId) - Number(a.id === demoId)).map((p) => ({ id: p.id, label: `${p.name} (#${p.code})` }));
 
@@ -142,11 +144,17 @@ async function Content() {
       </Section>
 
       <Section
+        id="try-it"
         title="Try it"
         text="No AI app? Run the same tools here. The result is exactly what an AI receives, and changes show on the board and in AI activity."
       >
         <div className="rounded-md border border-line bg-surface p-4">
-          <TryIt projectCodes={projects.map((p) => p.code)} members={members.map((m) => m.name)} defaultProject={demo?.code ?? projects[0]?.code ?? ''} />
+          <TryIt
+            projectCodes={projects.map((p) => p.code)}
+            members={members.map((m) => m.name)}
+            tasks={taskOptions}
+            defaultProject={demo?.code ?? projects[0]?.code ?? ''}
+          />
         </div>
       </Section>
 
@@ -157,9 +165,9 @@ async function Content() {
   );
 }
 
-function Section({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
+function Section({ id, title, text, children }: { id?: string; title: string; text: string; children: React.ReactNode }) {
   return (
-    <section>
+    <section id={id} className="scroll-mt-20">
       <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
       <p className="mb-3 mt-1 text-[13px] text-fg-subtle">{text}</p>
       {children}

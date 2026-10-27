@@ -85,7 +85,7 @@ export default function DependencyGraph({ tasks }: { tasks: BoardTask[] }) {
               strokeOpacity={e.active ? 1 : 0.6}
               markerEnd={`url(#${live ? 'dep-arrow-blocking' : 'dep-arrow'})`}
             >
-              <title>{`${byId.get(e.from)!.title} blocks ${byId.get(e.to)!.title}${live ? ' (still blocking)' : e.active ? ' (blocker done)' : ' (switched off)'}`}</title>
+              <title>{`${byId.get(e.from)!.ref} ${byId.get(e.from)!.title} blocks ${byId.get(e.to)!.ref} ${byId.get(e.to)!.title}${live ? ' (still blocking)' : e.active ? ' (blocker done)' : ' (switched off)'}`}</title>
             </path>
           );
         })}
@@ -98,12 +98,12 @@ export default function DependencyGraph({ tasks }: { tasks: BoardTask[] }) {
               <rect x={x} y={y} width={nodeW} height={nodeH} className={blocked ? 'fill-surface stroke-due-overdue' : 'fill-surface stroke-line-strong'} strokeWidth={blocked ? 1.5 : 1} />
               <rect x={x} y={y} width={3} height={nodeH} className={STAGE_FILL[t.status]} />
               <text x={x + 10} y={y + 16} className="fill-fg text-[11px] font-medium">
-                {truncate(t.title, 26)}
+                {truncate(`${t.ref} ${t.title}`, 26)}
               </text>
               <text x={x + 10} y={y + 30} className="fill-fg-subtle text-[10px]">
                 {blocked ? 'Blocked' : t.status === 'done' ? 'Done' : 'Unblocked'} · {t.assignee}
               </text>
-              <title>{t.title}</title>
+              <title>{`${t.ref} ${t.title}`}</title>
             </g>
           );
         })}
@@ -126,8 +126,8 @@ export default function DependencyGraph({ tasks }: { tasks: BoardTask[] }) {
         <tbody>
           {edges.map((e) => (
             <tr key={`${e.from}-${e.to}`}>
-              <th scope="row">{byId.get(e.to)!.title}</th>
-              <td>{`blocked by ${byId.get(e.from)!.title}`}</td>
+              <th scope="row">{`${byId.get(e.to)!.ref} ${byId.get(e.to)!.title}`}</th>
+              <td>{`blocked by ${byId.get(e.from)!.ref} ${byId.get(e.from)!.title}`}</td>
             </tr>
           ))}
         </tbody>

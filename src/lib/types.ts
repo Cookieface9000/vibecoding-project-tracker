@@ -15,6 +15,18 @@ export type Status = (typeof STAGES)[number]['id'];
 export interface Member {
   id: string;
   name: string;
+  avatar: string | null; // generated picture key (lib/avatar.ts); null = initials
+}
+
+/** The current user's editable profile. */
+export interface Profile extends Member {
+  username: string;
+  email: string;
+}
+
+/** Someone in a team, as shown to the team's members. */
+export interface TeamMember extends Member {
+  role: 'owner' | 'member';
 }
 
 export const LABEL_COLORS = ['blue', 'violet', 'pink', 'orange', 'teal', 'slate'] as const;
@@ -51,6 +63,7 @@ export interface Project {
   teamName: string | null;
   createdBy: string | null; // member name
   isMine: boolean; // created by the current user
+  isDemo: boolean; // the Demo Board, reset from the Connect an AI page
 }
 
 /** A team the current user belongs to. */
@@ -109,6 +122,7 @@ export interface PromptEntry {
 
 /** A task as shown on a board: includes its prompt history (newest first) and blockers. */
 export interface BoardTask extends Task {
+  ref: string; // e.g. DEMO-3: project code + position on the board, oldest first. How AI connections name it.
   prompts: PromptEntry[];
   dependsOn: string[]; // ids of tasks this one is blocked by (active or not)
   blockers: { taskId: string; active: boolean }[]; // same links, with their "active" switch

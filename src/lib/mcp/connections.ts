@@ -12,6 +12,7 @@ import { InvalidInput, UUID } from '../task-ops';
 export interface CallerContext {
   caller: string; // shown in history, e.g. "Reviewer – Claude (AI)"
   connectionId: string | null; // null = the in-app Try it panel
+  memberId: string | null; // the user it acts as: the connection's creator, or the current user
   canWrite: boolean;
   projectId: string | null; // null = every project the current user can see
 }
@@ -77,10 +78,13 @@ export async function createConnection(input: { name: string; canWrite: boolean;
   return secret;
 }
 
+/** The current user's connections, newest first. */
 export async function listConnections(): Promise<McpConnection[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase()
     .from('mcp_connections')
     .select('id, name, token_hint, can_write, project_id, created_at, expires_at, last_used_at, revoked_at, project:projects(name, code)')
+    .eq('created_by', user.id)
     .order('created_at', { ascending: false });
   if (error) throw new Error(`Failed to load connections: ${error.message}`);
   type Row = {
@@ -112,10 +116,12 @@ export async function listConnections(): Promise<McpConnection[]> {
 
 export async function revokeConnection(id: string) {
   if (!UUID.test(id)) throw new InvalidInput('Invalid connection.');
+  const user = await getCurrentUser();
   const { error } = await supabase()
     .from('mcp_connections')
     .update({ revoked_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('created_by', user.id)
     .is('revoked_at', null);
   if (error) throw new Error(`Couldn't revoke: ${error.message}`);
 }
@@ -126,7 +132,7 @@ export async function authenticate(secret: string): Promise<CallerContext | null
   const db = supabase();
   const { data } = await db
     .from('mcp_connections')
-    .select('id, name, can_write, project_id, expires_at, last_used_at, revoked_at')
+    .select('id, name, can_write, project_id, created_by, expires_at, last_used_at, revoked_at')
     .eq('token_hash', hashSecret(secret))
     .maybeSingle();
   if (!data || data.revoked_at || Date.parse(data.expires_at) <= Date.now()) return null;
@@ -135,7 +141,7 @@ export async function authenticate(secret: string): Promise<CallerContext | null
   if (!data.last_used_at || Date.now() - Date.parse(data.last_used_at) > 60_000) {
     await db.from('mcp_connections').update({ last_used_at: new Date().toISOString() }).eq('id', data.id);
   }
-  return { caller: callerName(data.name), connectionId: data.id, canWrite: data.can_write, projectId: data.project_id };
+  return { caller: callerName(data.name), connectionId: data.id, memberId: data.created_by, canWrite: data.can_write, projectId: data.project_id };
 }
 
 /** True when a connection has made too many tool calls in the last minute. */
@@ -151,14 +157,24 @@ export async function isRateLimited(connectionId: string) {
 export async function recordCall(ctx: CallerContext, call: { tool: string; summary: string; ok: boolean; detail?: Record<string, unknown> }) {
   await supabase()
     .from('mcp_calls')
-    .insert({ connection_id: ctx.connectionId, caller: ctx.caller, tool: call.tool, summary: call.summary, ok: call.ok, detail: call.detail ?? null });
+    .insert({
+      connection_id: ctx.connectionId,
+      member_id: ctx.memberId,
+      caller: ctx.caller,
+      tool: call.tool,
+      summary: call.summary,
+      ok: call.ok,
+      detail: call.detail ?? null,
+    });
 }
 
-/** Recent tool calls from every connection and the Try it panel, newest first. */
+/** The current user's recent tool calls (their connections and Try it), newest first. */
 export async function listRecentCalls(limit = 30): Promise<McpCall[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase()
     .from('mcp_calls')
     .select('id, caller, tool, summary, ok, detail, created_at')
+    .eq('member_id', user.id)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw new Error(`Failed to load AI activity: ${error.message}`);

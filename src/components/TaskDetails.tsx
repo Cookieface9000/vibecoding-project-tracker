@@ -10,7 +10,8 @@ import { dueLabel, dueState } from '@/lib/due';
 import { STAGES, type BoardTask, type Label, type Member } from '@/lib/types';
 import CopyButton from './CopyButton';
 import { ModalHeader, btn } from './Modal';
-import { DUE_STYLE, LABEL_STYLE, STAGE_DOT, TYPE_STYLE, initials } from './task-style';
+import Avatar from './Avatar';
+import { DUE_STYLE, LABEL_STYLE, STAGE_DOT, TYPE_STYLE } from './task-style';
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const dateTimeFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -73,7 +74,7 @@ export default function TaskDetails({
         id={`task-title-${task.id}`}
         eyebrow={
           <>
-            <span className="font-mono text-fg-subtle">#{projectCode}</span>
+            <span className="font-mono font-semibold text-brand-ink">{task.ref}</span>
             <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-medium uppercase tracking-wide ${type.chip}`}>
               <type.Icon className="h-3 w-3" aria-hidden />
               {type.label}
@@ -95,9 +96,7 @@ export default function TaskDetails({
           </Fact>
           <Fact label="Assignee" icon={User}>
             <span className="inline-flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-avatar text-[10px] font-semibold text-fg-muted">
-                {initials(task.assignee)}
-              </span>
+              <Avatar name={task.assignee} avatar={members.find((m) => m.name === task.assignee)?.avatar} size={24} />
               {task.assignee}
             </span>
             <label htmlFor={`handoff-${task.id}`} className="sr-only">

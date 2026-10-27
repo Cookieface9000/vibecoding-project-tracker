@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import Board from '@/components/Board';
+import DemoBanner from '@/components/connect/DemoBanner';
 import DeliverablesBar from '@/components/DeliverablesBar';
 import Notice, { SetupNotice } from '@/components/Notice';
 import ProjectHeader from '@/components/ProjectHeader';
@@ -32,7 +33,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   try {
     project = await getProject(id);
     if (project) [tasks, members, labels, links] = await Promise.all([
-        listTasks(project.id),
+        listTasks(project),
         listMembers(),
         listLabels(),
         getDeliverables(project.id),
@@ -53,6 +54,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <ProjectHeader project={project} active="board" health={averageHealth(tasks)} />
       {/* pr-16 keeps the board clear of the pinned "Total context" tab on the right edge. */}
       <main className="flex-1 py-5 pl-6 pr-16">
+        {project.isDemo && <DemoBanner />}
         <DeliverablesBar projectId={project.id} links={links} />
         <Board
           tasks={tasks}

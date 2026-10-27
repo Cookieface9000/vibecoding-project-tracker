@@ -2,9 +2,14 @@
 -- Run once in Supabase: Dashboard → SQL Editor → paste → Run.
 
 -- Placeholder people (tasks are assigned to them; "Me" is the current user until auth exists).
+-- Profile: username, optional email, and avatar, a short key for a picture drawn in the browser
+-- ("letter:K" or "pattern:a1b2c3"; null = initials), so no image files are stored.
 create table if not exists public.members (
   id          uuid primary key default gen_random_uuid(),
   name        text not null unique check (char_length(btrim(name)) between 1 and 60),
+  username    text unique check (username ~ '^[a-z0-9][a-z0-9._-]{1,29}$'),
+  email       text check (email is null or (char_length(email) <= 120 and email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')),
+  avatar      text check (avatar is null or avatar ~ '^(letter:[A-Z]|pattern:[a-z0-9]{1,12})$'),
   created_at  timestamptz not null default now()
 );
 
@@ -146,6 +151,7 @@ create table if not exists public.mcp_connections (
 create table if not exists public.mcp_calls (
   id             uuid primary key default gen_random_uuid(),
   connection_id  uuid references public.mcp_connections (id) on delete cascade,  -- null = Try it panel
+  member_id      uuid references public.members (id) on delete set null,         -- the user it ran as
   caller         text not null,
   tool           text not null,
   summary        text not null default '',
@@ -155,6 +161,7 @@ create table if not exists public.mcp_calls (
 );
 create index if not exists mcp_calls_created_idx on public.mcp_calls (created_at desc);
 create index if not exists mcp_calls_connection_idx on public.mcp_calls (connection_id, created_at desc);
+create index if not exists mcp_calls_member_idx on public.mcp_calls (member_id, created_at desc);
 
 -- Previous versions of a task's context, saved whenever an AI replaces it.
 create table if not exists public.task_context_history (

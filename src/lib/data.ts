@@ -50,7 +50,7 @@ function fromRow(row: TaskRow): Task {
 
 // Projects carry their team and creator; `isMine` is relative to the current user.
 const PROJECT_SELECT =
-  'id, name, code, client, description, status, team_id, created_by, team:teams(name), creator:members!projects_created_by_fkey(name)';
+  'id, name, code, client, description, status, is_demo, team_id, created_by, team:teams(name), creator:members!projects_created_by_fkey(name)';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ProjectRow {
@@ -60,6 +60,7 @@ interface ProjectRow {
   client: string;
   description: string;
   status: Project['status'];
+  is_demo: boolean;
   team_id: string | null;
   created_by: string | null;
   team: { name: string } | null;
@@ -78,13 +79,17 @@ function projectFromRow(row: ProjectRow, user: CurrentUser): Project {
     teamName: row.team?.name ?? null,
     createdBy: row.creator?.name ?? null,
     isMine: row.created_by === user.id,
+    isDemo: row.is_demo,
   };
 }
 
-/** Projects the current user can see: ones they created, plus every project in their teams. */
+/**
+ * Projects the current user can see: their personal projects, every project in their teams,
+ * and the Demo Board (same rule as canSee).
+ */
 export async function listProjects(): Promise<Project[]> {
   const user = await getCurrentUser();
-  const visibility = [`created_by.eq.${user.id}`];
+  const visibility = [`and(team_id.is.null,created_by.eq.${user.id})`, 'is_demo.eq.true'];
   if (user.teamIds.length) visibility.push(`team_id.in.(${user.teamIds.join(',')})`);
 
   const { data, error } = await supabase()
@@ -93,7 +98,7 @@ export async function listProjects(): Promise<Project[]> {
     .or(visibility.join(','))
     .order('created_at', { ascending: true });
   if (error) throw new Error(`Failed to load projects: ${error.message}`);
-  return (data as unknown as ProjectRow[]).map((row) => projectFromRow(row, user));
+  return (data as unknown as ProjectRow[]).filter((row) => canSee(user, row)).map((row) => projectFromRow(row, user));
 }
 
 export interface ProjectSummary extends Project {
@@ -174,7 +179,7 @@ export async function listMyTeams(): Promise<Team[]> {
 
 /** Placeholder people tasks can be assigned to. */
 export async function listMembers(): Promise<Member[]> {
-  const { data, error } = await supabase().from('members').select('id, name').order('created_at', { ascending: true });
+  const { data, error } = await supabase().from('members').select('id, name, avatar').order('created_at', { ascending: true });
   if (error) throw new Error('Failed to load members: ' + error.message);
   return data as Member[];
 }
@@ -197,17 +202,22 @@ export async function getProject(id: string): Promise<Project | null> {
   return canSee(user, row) ? projectFromRow(row, user) : null;
 }
 
-/** A project's tasks with their prompt history (newest prompt first), in one query. */
-export async function listTasks(projectId: string): Promise<BoardTask[]> {
+/**
+ * A project's tasks with their prompt history (newest prompt first), in one query.
+ * Each task gets its reference (DEMO-3): the project code + its position, oldest first.
+ */
+export async function listTasks(project: Pick<Project, 'id' | 'code'>): Promise<BoardTask[]> {
   const { data, error } = await supabase()
     .from('tasks')
     .select('*, task_prompts(id, tool, prompt, created_at), blockers:task_dependencies!task_dependencies_task_id_fkey(depends_on, active, created_at)')
-    .eq('project_id', projectId)
+    .eq('project_id', project.id)
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true }) // tie-break so references never swap
     .order('created_at', { referencedTable: 'task_prompts', ascending: false });
   if (error) throw new Error(`Failed to load tasks: ${error.message}`);
-  return (data as (TaskRow & { task_prompts: PromptRow[]; blockers: { depends_on: string; active: boolean; created_at: string }[] })[]).map((row) => ({
+  return (data as (TaskRow & { task_prompts: PromptRow[]; blockers: { depends_on: string; active: boolean; created_at: string }[] })[]).map((row, i) => ({
     ...fromRow(row),
+    ref: `${project.code}-${i + 1}`,
     prompts: row.task_prompts.map((p) => ({ id: p.id, tool: p.tool, prompt: p.prompt, createdAt: p.created_at })),
     dependsOn: row.blockers.map((b) => b.depends_on),
     blockers: [...row.blockers]

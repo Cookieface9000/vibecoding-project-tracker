@@ -103,7 +103,13 @@ export default function TaskForm({
     <form onSubmit={submit} className="flex min-h-0 flex-col">
       <ModalHeader
         id={titleId}
-        eyebrow={<span className="font-mono text-fg-subtle">#{projectCode}</span>}
+        eyebrow={
+          editing ? (
+            <span className="font-mono font-semibold text-brand-ink">{task!.ref}</span>
+          ) : (
+            <span className="font-mono text-fg-subtle">#{projectCode}</span>
+          )
+        }
         title={editing ? 'Edit task' : 'New task'}
         onClose={onCancel}
       />
@@ -269,6 +275,7 @@ export default function TaskForm({
                         className="h-3.5 w-3.5 accent-brand"
                       />
                       <span className={'h-2 w-2 shrink-0 rounded-full ' + STAGE_DOT[t.status]} aria-hidden />
+                      <span className="shrink-0 font-mono text-[12px] font-semibold text-brand-ink">{t.ref}</span>
                       <span className="min-w-0 flex-1 truncate text-fg">{t.title}</span>
                       <span className="shrink-0 text-[11px] text-fg-subtle">{STAGES.find((st) => st.id === t.status)?.label}</span>
                     </label>

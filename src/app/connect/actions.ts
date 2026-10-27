@@ -56,7 +56,7 @@ export async function revokeConnectionAction(id: string): Promise<Result> {
 /** The Try it panel: run a tool exactly as an AI connection would, as the current user. */
 export async function runToolAction(name: string, args: Record<string, unknown>): Promise<ToolResult> {
   const user = await getCurrentUser();
-  const ctx: CallerContext = { caller: `${user.name} (Try it)`, connectionId: null, canWrite: true, projectId: null };
+  const ctx: CallerContext = { caller: `${user.name} (Try it)`, connectionId: null, memberId: user.id, canWrite: true, projectId: null };
   const result = await runTool(name, args, ctx);
   revalidatePath('/connect');
   return result;

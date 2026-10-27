@@ -29,7 +29,7 @@ import TaskDetails from './TaskDetails';
 import TaskForm from './TaskForm';
 import Toast, { type ToastMessage } from './Toast';
 import TotalContext, { type BoardProjectInfo } from './TotalContext';
-import { initials } from './task-style';
+import Avatar from './Avatar';
 
 // Coloured underline per stage (DESIGN.md §2): grey → blue → violet → green.
 const STAGE_BAR: Record<Status, string> = {
@@ -232,6 +232,7 @@ export default function Board({
 
   const labelById = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
   const labelOf = (task: BoardTask) => (task.labelId ? labelById.get(task.labelId) : undefined);
+  const avatarOf = (name: string) => members.find((m) => m.name === name)?.avatar ?? null;
 
   // Global keyboard shortcuts (Settings → Keyboard shortcuts) talk to the board via events.
   useEffect(() => {
@@ -320,9 +321,7 @@ export default function Board({
                   title={`${d.name} · ${d.count} open`}
                   className="inline-flex h-6 items-center gap-1 border border-line bg-surface pl-0.5 pr-2 text-[12px] font-medium text-fg-muted"
                 >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-avatar text-[9px] font-semibold text-fg-muted" aria-hidden>
-                    {initials(d.name)}
-                  </span>
+                  <Avatar name={d.name} avatar={avatarOf(d.name)} size={20} />
                   <span className="tabular">{d.count}</span>
                   <span className="sr-only">{`${d.name}: ${d.count} open`}</span>
                 </li>
@@ -373,6 +372,7 @@ export default function Board({
               label={stage.label}
               tasks={tasks.filter((t) => t.status === stage.id)}
               labelOf={labelOf}
+              avatarOf={avatarOf}
               blockedIds={blockedIds}
               settledId={settledId}
               glowId={glowId}
@@ -385,7 +385,7 @@ export default function Board({
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {activeTask && <TaskCardBody task={activeTask} label={labelOf(activeTask)} blocked={blockedIds.has(activeTask.id)} lifted />}
+          {activeTask && <TaskCardBody task={activeTask} label={labelOf(activeTask)} avatar={avatarOf(activeTask.assignee)} blocked={blockedIds.has(activeTask.id)} lifted />}
         </DragOverlay>
       </DndContext>
 
@@ -449,6 +449,7 @@ function Column({
   label,
   tasks,
   labelOf,
+  avatarOf,
   blockedIds,
   settledId,
   glowId,
@@ -461,6 +462,7 @@ function Column({
   label: string;
   tasks: BoardTask[];
   labelOf: (task: BoardTask) => Label | undefined;
+  avatarOf: (name: string) => string | null;
   blockedIds: Set<string>;
   settledId: string | null;
   glowId: string | null;
@@ -508,6 +510,7 @@ function Column({
             blocked={blockedIds.has(task.id)}
             settle={settledId === task.id || remoteIds.has(task.id)}
             glow={glowId === task.id || remoteIds.has(task.id)}
+            avatar={avatarOf(task.assignee)}
             projectCode={projectCode}
             onOpen={() => onOpen(task.id)}
           />

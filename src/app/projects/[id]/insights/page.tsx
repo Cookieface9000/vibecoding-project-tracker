@@ -33,7 +33,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ id: s
   let events: TaskEvent[] = [];
   try {
     project = await getProject(id);
-    if (project) [tasks, events] = await Promise.all([listTasks(project.id), listEvents(project.id)]);
+    if (project) [tasks, events] = await Promise.all([listTasks(project), listEvents(project.id)]);
   } catch (err) {
     return (
       <AppShell activeProjectId={id}>

@@ -8,7 +8,8 @@ import { dueLabel, dueState } from '@/lib/due';
 import { contextHealth } from '@/lib/health';
 import type { BoardTask, Label } from '@/lib/types';
 import { HealthEdge } from './HealthMeter';
-import { DUE_STYLE, LABEL_STYLE, TYPE_STYLE, initials } from './task-style';
+import Avatar from './Avatar';
+import { DUE_STYLE, LABEL_STYLE, TYPE_STYLE } from './task-style';
 
 // Compact, fixed-height ticket: title (max 2 lines) + one meta row + a health bar on the bottom edge.
 // Colour coding = whole-card tint by due urgency; type by icon; label by chip.
@@ -21,9 +22,11 @@ export function TaskCardBody({
   settle = false,
   glow = false,
   copyCode,
+  avatar = null,
 }: {
   task: BoardTask;
   label?: Label;
+  avatar?: string | null; // the assignee's generated picture key
   blocked?: boolean;
   lifted?: boolean;
   copyCode?: string; // when set, show the on-card Copy context button
@@ -47,6 +50,7 @@ export function TaskCardBody({
         <span
           className={`line-clamp-2 text-[13px] font-medium leading-[18px] tracking-[-0.005em] ${done ? 'text-fg-subtle line-through decoration-slate-400/60' : 'text-fg'}`}
         >
+          <span className="mr-1.5 font-mono text-[12px] font-semibold text-brand-ink">{task.ref}</span>
           {task.title}
         </span>
         <span className="flex shrink-0 items-center gap-1">
@@ -81,11 +85,8 @@ export function TaskCardBody({
             </span>
           )}
         </span>
-        <span
-          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-avatar text-[9px] font-semibold text-fg-muted ${glow ? 'motion-safe:animate-glow' : ''}`}
-          title={`Assigned to ${task.assignee}`}
-        >
-          {initials(task.assignee)}
+        <span className={`flex shrink-0 rounded-full ${glow ? 'motion-safe:animate-glow' : ''}`} title={`Assigned to ${task.assignee}`}>
+          <Avatar name={task.assignee} avatar={avatar} size={20} />
         </span>
       </span>
 
@@ -127,7 +128,7 @@ function CardCopyButton({ task, projectCode }: { task: BoardTask; projectCode: s
       onClick={copy}
       onPointerDown={stop}
       onKeyDown={stop}
-      aria-label={copied ? 'Context copied' : `Copy context for ${task.title}`}
+      aria-label={copied ? 'Context copied' : `Copy context for ${task.ref}`}
       title={copied ? 'Copied — paste it into your AI' : 'Copy context'}
       className={`-m-1 inline-flex h-6 w-6 items-center justify-center rounded border border-transparent text-fg-subtle hover:border-line-strong hover:bg-surface hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${copied ? 'text-brand-ink' : ''}`}
     >
@@ -144,6 +145,7 @@ export default function TaskCard({
   blocked,
   settle,
   glow,
+  avatar,
   projectCode,
   onOpen,
 }: {
@@ -152,6 +154,7 @@ export default function TaskCard({
   blocked?: boolean;
   settle?: boolean;
   glow?: boolean;
+  avatar?: string | null;
   projectCode: string;
   onOpen: () => void;
 }) {
@@ -178,13 +181,13 @@ export default function TaskCard({
         }
         listeners?.onKeyDown?.(e);
       }}
-      aria-label={`${task.title}. ${extras} Press Enter to open, Space to move.`}
+      aria-label={`${task.ref}: ${task.title}. ${extras} Press Enter to open, Space to move.`}
       data-task-card
       className={`group cursor-grab touch-none rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand active:cursor-grabbing ${
         isDragging ? 'opacity-40' : ''
       }`}
     >
-      <TaskCardBody task={task} label={label} blocked={blocked} settle={settle} glow={glow} copyCode={projectCode} />
+      <TaskCardBody task={task} label={label} blocked={blocked} settle={settle} glow={glow} avatar={avatar} copyCode={projectCode} />
     </div>
   );
 }

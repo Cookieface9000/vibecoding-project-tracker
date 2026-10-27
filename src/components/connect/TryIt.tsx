@@ -13,7 +13,22 @@ import { CONTEXT_TOOLS, STAGES } from '@/lib/types';
 
 type Values = Record<string, string | boolean>;
 
-export default function TryIt({ projectCodes, members, defaultProject }: { projectCodes: string[]; members: string[]; defaultProject: string }) {
+export interface TaskOption {
+  ref: string; // DEMO-3
+  title: string;
+}
+
+export default function TryIt({
+  projectCodes,
+  members,
+  tasks,
+  defaultProject,
+}: {
+  projectCodes: string[];
+  members: string[];
+  tasks: TaskOption[];
+  defaultProject: string;
+}) {
   const router = useRouter();
   const [toolName, setToolName] = useState('get_board');
   const [values, setValues] = useState<Values>({ project: defaultProject });
@@ -74,7 +89,7 @@ export default function TryIt({ projectCodes, members, defaultProject }: { proje
       {tool.fields.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
           {tool.fields.map((f) => (
-            <Field key={f.name} field={f} value={values[f.name]} onChange={(v) => set(f.name, v)} projectCodes={projectCodes} members={members} />
+            <Field key={f.name} field={f} value={values[f.name]} onChange={(v) => set(f.name, v)} projectCodes={projectCodes} members={members} tasks={tasks} />
           ))}
         </div>
       )}
@@ -94,6 +109,13 @@ export default function TryIt({ projectCodes, members, defaultProject }: { proje
           </pre>
         </div>
       )}
+
+      {/* Suggestions for every task field: the references shown on the cards, with titles. */}
+      <datalist id="try-it-tasks">
+        {tasks.map((t) => (
+          <option key={t.ref} value={t.ref} label={t.title} />
+        ))}
+      </datalist>
     </form>
   );
 }
@@ -113,12 +135,14 @@ function Field({
   onChange,
   projectCodes,
   members,
+  tasks,
 }: {
   field: ToolField;
   value: string | boolean | undefined;
   onChange: (value: string | boolean) => void;
   projectCodes: string[];
   members: string[];
+  tasks: TaskOption[];
 }) {
   const label = `${f.name}${f.required ? '' : ' (optional)'}`;
   const text = typeof value === 'string' ? value : '';
@@ -166,9 +190,18 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
           required={f.required}
           placeholder={f.type === 'task' ? 'DEMO-3' : undefined}
+          list={f.type === 'task' ? 'try-it-tasks' : undefined}
         />
       )}
-      <p className={fieldHint}>{f.type === 'moves' ? 'One per line: task, then column (todo, in-progress, review, done).' : f.help}</p>
+      <p className={fieldHint}>{hint(f, text, tasks)}</p>
     </label>
   );
+}
+
+/** Under a task field, name the task the reference points to, so it's easy to match to its card. */
+function hint(f: ToolField, text: string, tasks: TaskOption[]) {
+  if (f.type === 'moves') return 'One per line: task, then column (todo, in-progress, review, done).';
+  if (f.type !== 'task' || !text.trim()) return f.help;
+  const match = tasks.find((t) => t.ref.toLowerCase() === text.trim().toLowerCase().replace(/^#/, ''));
+  return match ? `${match.ref}: ${match.title}` : `No task ${text.trim()} on your boards. ${f.help}`;
 }

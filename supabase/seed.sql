@@ -3,7 +3,8 @@
 -- Due dates are relative to today so every urgency colour shows: on track, due soon, overdue, done.
 
 -- Placeholder members and colour labels.
-insert into public.members (name) values ('Me'), ('Alex Morgan'), ('Sam Patel'), ('Jordan Lee'), ('Riley Chen')
+insert into public.members (name, username) values
+  ('Me', 'me'), ('Alex Morgan', 'alex.morgan'), ('Sam Patel', 'sam.patel'), ('Jordan Lee', 'jordan.lee'), ('Riley Chen', 'riley.chen')
 on conflict (name) do nothing;
 insert into public.labels (name, color) values
   ('Frontend', 'blue'), ('Backend', 'violet'), ('Design', 'pink'),
@@ -167,3 +168,38 @@ join public.projects p on p.code = v.pcode
 join public.tasks a on a.project_id = p.id and a.title = v.task
 join public.tasks b on b.project_id = p.id and b.title = v.blocker
 on conflict do nothing;
+
+-- ── A second user to test teams with ────────────────────────────────────────
+-- "User 2" is in no team except their own, Studio Two (code VT-STU2), which has one project.
+insert into public.members (name, username) values ('User 2', 'user2')
+on conflict (name) do nothing;
+
+insert into public.teams (name, code, description)
+select 'Studio Two', 'VT-STU2', 'User 2''s team, for testing joining, leaving and removing members.'
+where not exists (select 1 from public.teams where code = 'VT-STU2');
+
+insert into public.team_members (team_id, member_id, role)
+select t.id, m.id, 'owner' from public.teams t, public.members m
+where t.code = 'VT-STU2' and m.name = 'User 2'
+on conflict do nothing;
+
+with team as (select id from public.teams where code = 'VT-STU2'),
+     owner as (select id from public.members where name = 'User 2'),
+     p as (
+       insert into public.projects (name, code, client, description, team_id, created_by)
+       select 'Side Project', 'SIDE', 'Studio Two', 'Only visible to members of Studio Two. Join with code VT-STU2 to see it.', team.id, owner.id
+       from team, owner
+       where not exists (select 1 from public.projects where code = 'SIDE' and team_id = team.id)
+       returning id
+     ),
+     links as (
+       insert into public.deliverables (project_id, kind)
+       select p.id, k from p, unnest(array['presentation', 'demo', 'report', 'documentation']) as k
+     )
+insert into public.tasks (project_id, title, description, type, status, assignee, due_date, created_at)
+select p.id, t.title, t.description, 'feature', t.status, 'User 2', current_date + t.days, now() - t.ago
+from p, (values
+  ('Sketch the onboarding flow', 'Three screens: welcome, connect, first task.', 'todo', 4, interval '3 minutes'),
+  ('Pick a colour palette', 'Two options to show the team.', 'in-progress', 1, interval '2 minutes'),
+  ('Write the README', 'How to run it locally.', 'done', -1, interval '1 minute')
+) as t(title, description, status, days, ago);

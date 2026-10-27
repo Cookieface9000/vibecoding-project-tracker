@@ -1,7 +1,8 @@
 'use client';
 
-import { BookOpen, ExternalLink, FileText, MonitorPlay, Pencil, Plus, Presentation, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChevronUp, ExternalLink, FileText, MonitorPlay, Pencil, Plus, Presentation, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { useRememberedOpen } from './useRememberedOpen';
 import { setDeliverable } from '@/app/actions';
 import { DELIVERABLES, type DeliverableKind, type Deliverables } from '@/lib/types';
 
@@ -21,25 +22,42 @@ function displayHost(url: string) {
   }
 }
 
-// M11: four pinned project links in one compact, segmented bar.
+// M11: four pinned project links in one compact, segmented bar. The arrow folds it away;
+// open/closed is remembered per browser.
 export default function DeliverablesBar({ projectId, links }: { projectId: string; links: Deliverables }) {
   const set = DELIVERABLES.filter((k) => links[k]).length;
+  const [open, toggle] = useRememberedOpen('vibetracker.collapse.project-links');
 
   return (
     <section aria-labelledby="deliverables-title" className="mb-5">
-      <div className="mb-2 flex items-baseline justify-between">
+      <div className={`flex items-baseline justify-between ${open ? 'mb-2' : ''}`}>
         <h2 id="deliverables-title" className="text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">
-          Project links
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={open}
+            aria-controls="deliverables-slots"
+            className="inline-flex items-center gap-1 uppercase hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            Project links
+            <ChevronUp className={`h-3.5 w-3.5 transition-transform duration-150 ${open ? '' : 'rotate-180'}`} aria-hidden />
+            <span className="sr-only">{open ? '(hide)' : '(show)'}</span>
+          </button>
         </h2>
         <span className="tabular text-[12px] text-fg-subtle">
           {set}/{DELIVERABLES.length}
         </span>
       </div>
-      <div className="grid grid-cols-1 overflow-hidden rounded-lg border border-line bg-surface shadow-card sm:grid-cols-2 xl:grid-cols-4">
-        {DELIVERABLES.map((kind, i) => (
-          <Slot key={kind} projectId={projectId} kind={kind} saved={links[kind]} first={i === 0} />
-        ))}
-      </div>
+      {open && (
+        <div
+          id="deliverables-slots"
+          className="grid grid-cols-1 overflow-hidden rounded-lg border border-line bg-surface shadow-card sm:grid-cols-2 xl:grid-cols-4"
+        >
+          {DELIVERABLES.map((kind, i) => (
+            <Slot key={kind} projectId={projectId} kind={kind} saved={links[kind]} first={i === 0} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

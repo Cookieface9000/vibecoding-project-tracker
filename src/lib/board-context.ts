@@ -15,7 +15,7 @@ export function formatBoardContext(
 ): string {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const labelName = (id: string | null) => (id ? labels.find((l) => l.id === id)?.name : undefined);
-  const ref = (t: BoardTask) => `${project.code}-${tasks.indexOf(t) + 1}`;
+  const ref = (t: BoardTask) => t.ref;
   const now = new Date();
 
   const open = tasks.filter((t) => t.status !== 'done');

@@ -63,6 +63,7 @@ function sample(overrides: Partial<BoardTask>): BoardTask {
     context: '',
     contextTool: null,
     contextUpdatedAt: null,
+    ref: 'DEMO-1',
     prompts: [],
     dependsOn: [],
     blockers: [],

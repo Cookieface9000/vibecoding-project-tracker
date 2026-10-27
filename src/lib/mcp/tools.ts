@@ -99,9 +99,9 @@ interface Board {
 }
 
 async function loadBoard(project: Project): Promise<Board> {
-  const tasks = await listTasks(project.id);
-  // Same numbering as the board's "Total context": position on the board, oldest first.
-  return { project, tasks, byId: new Map(tasks.map((t) => [t.id, t])), ref: (t) => `${project.code}-${tasks.indexOf(t) + 1}` };
+  const tasks = await listTasks(project);
+  // The same references the board shows on every card (from listTasks).
+  return { project, tasks, byId: new Map(tasks.map((t) => [t.id, t])), ref: (t) => t.ref };
 }
 
 /** Find a task by reference (DEMO-3), plain number within `within`, or id. */
@@ -126,7 +126,7 @@ async function resolveTask(ctx: CallerContext, ref: string, within?: Board): Pro
     if (projects.length !== 1) throw new InvalidInput(`Include the project code, like DEMO-${num}.`);
     board = await loadBoard(projects[0]);
   }
-  const task = board.tasks[Number(num) - 1];
+  const task = board.tasks.find((t) => t.ref === `${board!.project.code}-${Number(num)}`);
   if (!task) throw new InvalidInput(`${board.project.code} has no task ${num}. It has ${board.tasks.length} tasks.`);
   return { board, task };
 }

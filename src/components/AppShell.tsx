@@ -2,9 +2,11 @@ import { BookOpen, LayoutGrid, Plug, Plus } from 'lucide-react';
 import Link from 'next/link';
 import SettingsButton from '@/components/settings/SettingsButton';
 import Collapsible from '@/components/Collapsible';
-import { listMyTeams, listProjects } from '@/lib/data';
+import UserSwitcher from '@/components/UserSwitcher';
+import { getCurrentUser } from '@/lib/current-user';
+import { listMembers, listMyTeams, listProjects } from '@/lib/data';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import type { Project, Team } from '@/lib/types';
+import type { Member, Project, Team } from '@/lib/types';
 
 // Quiet, dark sidebar: workspace, navigation, projects, settings.
 const navItem =
@@ -27,9 +29,13 @@ export default async function AppShell({
 }) {
   let projects: Project[] = [];
   let teams: Team[] = [];
+  let me: Member | null = null;
+  let members: Member[] = [];
   if (isSupabaseConfigured()) {
     try {
-      [projects, teams] = await Promise.all([listProjects(), listMyTeams()]);
+      let user;
+      [projects, teams, user, members] = await Promise.all([listProjects(), listMyTeams(), getCurrentUser(), listMembers()]);
+      me = { id: user.id, name: user.name, avatar: user.avatar };
     } catch {
       /* the page itself shows the error */
     }
@@ -134,7 +140,8 @@ export default async function AppShell({
         </nav>
 
         {/* Settings cog, pinned to the bottom of the sidebar. */}
-        <div className="border-t border-sidebar-line px-3 py-2">
+        <div className="space-y-1 border-t border-sidebar-line px-3 py-2">
+          {me && <UserSwitcher current={me} members={members} />}
           <SettingsButton />
         </div>
       </aside>

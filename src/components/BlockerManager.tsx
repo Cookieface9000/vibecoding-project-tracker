@@ -54,6 +54,7 @@ export default function BlockerManager({
                   className="flex min-w-0 flex-1 items-center gap-2 text-left text-[13px] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <span className={`h-2 w-2 shrink-0 rounded-full ${STAGE_DOT[blocker.status]}`} aria-hidden />
+                  <span className="shrink-0 font-mono text-[12px] font-semibold text-brand-ink">{blocker.ref}</span>
                   <span className={`truncate ${done ? 'text-fg-subtle line-through decoration-fg-subtle/50' : 'text-fg'}`}>{blocker.title}</span>
                   <span className="shrink-0 text-[11px] text-fg-subtle">{STAGES.find((s) => s.id === blocker.status)?.label}</span>
                 </button>
@@ -68,7 +69,7 @@ export default function BlockerManager({
                   type="button"
                   onClick={() => controls.onRemove(blocker.id)}
                   disabled={controls.busy}
-                  aria-label={`Remove ${blocker.title} as a blocker`}
+                  aria-label={`Remove ${blocker.ref} ${blocker.title} as a blocker`}
                   title="Remove blocker"
                   className="shrink-0 rounded p-1 text-fg-subtle hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50"
                 >
@@ -109,7 +110,7 @@ export default function BlockerManager({
                   <optgroup key={stage.id} label={stage.label}>
                     {group.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.title}
+                        {t.ref} · {t.title}
                       </option>
                     ))}
                   </optgroup>

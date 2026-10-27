@@ -21,7 +21,7 @@ export default function EditPicker({
 }) {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
-  const matches = q ? tasks.filter((t) => t.title.toLowerCase().includes(q)) : tasks;
+  const matches = q ? tasks.filter((t) => t.title.toLowerCase().includes(q) || t.ref.toLowerCase().includes(q)) : tasks;
 
   return (
     <>
@@ -65,6 +65,7 @@ export default function EditPicker({
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                       >
                         <type.Icon className={`h-4 w-4 shrink-0 ${type.icon}`} aria-label={type.label} />
+                        <span className="shrink-0 font-mono text-[12px] font-semibold text-brand-ink">{task.ref}</span>
                         <span className="min-w-0 flex-1 truncate font-medium text-fg">{task.title}</span>
                         {hasContext(task.context) && (
                           <MessageSquareText className="h-4 w-4 shrink-0 text-brand-ink" aria-label="Has AI context" />

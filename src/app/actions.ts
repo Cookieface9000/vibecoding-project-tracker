@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { deriveProjectCode, normaliseProjectCode } from '@/lib/project-code';
-import { canSee, getCurrentUser } from '@/lib/current-user';
+import { cookies } from 'next/headers';
+import { AVATAR_KEY } from '@/lib/avatar';
+import { canSee, CURRENT_USER_COOKIE, getCurrentUser } from '@/lib/current-user';
 import { listMyTeams } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import {
@@ -22,6 +24,9 @@ import {
   DELIVERABLES,
   TASK_TYPES,
   type DeliverableKind,
+  type Member,
+  type Profile,
+  type TeamMember,
   type Status,
   type TaskInput,
   type Team,
@@ -129,7 +134,7 @@ async function validate(input: TaskInput) {
 async function assertAccess(projectId: string) {
   if (!UUID.test(projectId)) throw new InvalidInput('Invalid project.');
   const user = await getCurrentUser();
-  const { data } = await supabase().from('projects').select('created_by, team_id').eq('id', projectId).maybeSingle();
+  const { data } = await supabase().from('projects').select('created_by, team_id, is_demo').eq('id', projectId).maybeSingle();
   if (!data || !canSee(user, data)) throw new InvalidInput("You don't have access to this project.");
 }
 
@@ -380,4 +385,106 @@ export async function createTeam(rawName: string, rawDescription: string): Promi
     return { ok: true, teams: await listMyTeams(), code, message: `Created ${name}.` };
   }
   return { ok: false, error: "Couldn't generate a unique team code. Please try again." };
+}
+
+/** Leave a team. Its projects disappear from your lists. Owners can't leave their own team. */
+export async function leaveTeam(teamId: string): Promise<TeamResult> {
+  if (!UUID.test(teamId)) return { ok: false, error: 'Invalid team.' };
+  const user = await getCurrentUser();
+  const db = supabase();
+  const { data: me } = await db.from('team_members').select('role, team:teams(name)').eq('team_id', teamId).eq('member_id', user.id).maybeSingle();
+  if (!me) return { ok: false, error: "You're not in that team." };
+  if (me.role === 'owner') return { ok: false, error: "Owners can't leave their own team. Remove its other members instead." };
+  const { error } = await db.from('team_members').delete().eq('team_id', teamId).eq('member_id', user.id);
+  if (error) return { ok: false, error: `Couldn't leave: ${error.message}` };
+  revalidatePath('/', 'layout');
+  const name = (me.team as unknown as { name: string } | null)?.name ?? 'the team';
+  return { ok: true, teams: await listMyTeams(), message: `Left ${name}. Its projects are no longer in your list.` };
+}
+
+export type TeamMembersResult = { ok: true; members: TeamMember[] } | { ok: false; error: string };
+
+/** Everyone in a team you belong to, owner first. */
+export async function getTeamMembers(teamId: string): Promise<TeamMembersResult> {
+  if (!UUID.test(teamId)) return { ok: false, error: 'Invalid team.' };
+  const user = await getCurrentUser();
+  if (!user.teamIds.includes(teamId)) return { ok: false, error: "You're not in that team." };
+  const { data, error } = await supabase()
+    .from('team_members')
+    .select('role, joined_at, member:members(id, name, avatar)')
+    .eq('team_id', teamId)
+    .order('joined_at', { ascending: true });
+  if (error) return { ok: false, error: "Couldn't load the members." };
+  type Row = { role: TeamMember['role']; member: Member | null };
+  const members = (data as unknown as Row[])
+    .filter((r) => r.member)
+    .map((r) => ({ ...r.member!, role: r.role }))
+    .sort((a, b) => Number(b.role === 'owner') - Number(a.role === 'owner'));
+  return { ok: true, members };
+}
+
+/** Team owners: remove someone from the team. They lose access to its projects. */
+export async function removeTeamMember(teamId: string, memberId: string): Promise<TeamMembersResult> {
+  if (!UUID.test(teamId) || !UUID.test(memberId)) return { ok: false, error: 'Invalid member.' };
+  const user = await getCurrentUser();
+  const db = supabase();
+  const { data: me } = await db.from('team_members').select('role').eq('team_id', teamId).eq('member_id', user.id).maybeSingle();
+  if (me?.role !== 'owner') return { ok: false, error: 'Only the team owner can remove members.' };
+  if (memberId === user.id) return { ok: false, error: "You can't remove yourself as the owner." };
+  const { error } = await db.from('team_members').delete().eq('team_id', teamId).eq('member_id', memberId);
+  if (error) return { ok: false, error: `Couldn't remove them: ${error.message}` };
+  revalidatePath('/', 'layout');
+  return getTeamMembers(teamId);
+}
+
+// ── Profile and switching user ──────────────────────────────────────────────
+
+export type ProfileResult = { ok: true; profile: Profile; message?: string } | { ok: false; error: string };
+
+export async function getProfile(): Promise<ProfileResult> {
+  try {
+    const user = await getCurrentUser();
+    const { data, error } = await supabase().from('members').select('id, name, username, email, avatar').eq('id', user.id).single();
+    if (error) throw error;
+    return { ok: true, profile: { ...data, username: data.username ?? '', email: data.email ?? '' } };
+  } catch {
+    return { ok: false, error: "Couldn't load your profile." };
+  }
+}
+
+const USERNAME = /^[a-z0-9][a-z0-9._-]{1,29}$/;
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Save the current user's name, username, email and picture. Renaming updates their tasks too. */
+export async function updateProfile(input: { name: string; username: string; email: string; avatar: string | null }): Promise<ProfileResult> {
+  const name = input.name.trim();
+  const username = input.username.trim().toLowerCase();
+  const email = input.email.trim();
+  if (!name) return { ok: false, error: 'Enter a display name.' };
+  if (name.length > 60) return { ok: false, error: 'Display name must be 60 characters or fewer.' };
+  if (!USERNAME.test(username)) return { ok: false, error: 'Usernames are 2–30 lowercase letters, numbers, dots, dashes or underscores.' };
+  if (email && (email.length > 120 || !EMAIL.test(email))) return { ok: false, error: 'Enter a valid email, or leave it empty.' };
+  if (input.avatar !== null && !AVATAR_KEY.test(input.avatar)) return { ok: false, error: 'Choose a picture from the list.' };
+
+  const user = await getCurrentUser();
+  const db = supabase();
+  const { error } = await db.from('members').update({ name, username, email: email || null, avatar: input.avatar }).eq('id', user.id);
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: error.message.includes('username') ? 'That username is taken.' : 'Someone already has that display name.' };
+    return { ok: false, error: `Couldn't save: ${error.message}` };
+  }
+  // Tasks are assigned by name, so carry them over to the new name.
+  if (name !== user.name) await db.from('tasks').update({ assignee: name }).eq('assignee', user.name);
+  revalidatePath('/', 'layout');
+  return { ok: true, profile: { id: user.id, name, username, email, avatar: input.avatar }, message: 'Profile saved.' };
+}
+
+/** Act as another member (stand-in for signing in, until accounts exist). */
+export async function switchUser(memberId: string): Promise<ActionResult> {
+  if (!UUID.test(memberId)) return { ok: false, error: 'Invalid user.' };
+  const { data } = await supabase().from('members').select('id').eq('id', memberId).maybeSingle();
+  if (!data) return { ok: false, error: 'That user no longer exists.' };
+  (await cookies()).set(CURRENT_USER_COOKIE, memberId, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
+  revalidatePath('/', 'layout');
+  return { ok: true };
 }

@@ -2,6 +2,7 @@ import 'server-only';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
+import { runAsMember } from '../current-user';
 import { isSupabaseConfigured } from '../supabase';
 import { authenticate, isRateLimited, type CallerContext } from './connections';
 import { inputShape, pickUpTaskPrompt, runTool, toolsFor } from './tools';
@@ -75,13 +76,17 @@ export async function handleMcpRequest(req: Request, secret: string | null): Pro
     return jsonError(429, 'Too many requests from this connection. Wait a minute and try again.');
   }
 
-  const server = createServer(ctx);
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  await server.connect(transport);
-  try {
-    return await transport.handleRequest(req);
-  } finally {
-    // The JSON response is complete once handleRequest resolves.
-    void server.close();
-  }
+  // Everything below runs as the member who created the connection.
+  const handle = async () => {
+    const server = createServer(ctx);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    try {
+      return await transport.handleRequest(req);
+    } finally {
+      // The JSON response is complete once handleRequest resolves.
+      void server.close();
+    }
+  };
+  return ctx.memberId ? runAsMember(ctx.memberId, handle) : handle();
 }

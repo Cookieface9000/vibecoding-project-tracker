@@ -1,11 +1,12 @@
 'use client';
 
-import { Crown, Users } from 'lucide-react';
+import { ChevronDown, Crown, LogOut, UserMinus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { createTeam, getMyTeams, joinTeam } from '@/app/actions';
-import type { Team } from '@/lib/types';
+import { createTeam, getMyTeams, getTeamMembers, joinTeam, leaveTeam, removeTeamMember } from '@/app/actions';
+import type { Team, TeamMember } from '@/lib/types';
+import Avatar from '../Avatar';
 import CopyButton from '../CopyButton';
 import { btn } from '../Modal';
 import { PanelTitle, settingsField, settingsLabel } from './ui';
@@ -65,29 +66,20 @@ export function TeamsTab() {
       ) : (
         <ul className="mb-8 divide-y divide-line border border-line">
           {teams.map((team) => (
-            <li key={team.id} className="flex items-center gap-3 p-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted text-fg-muted">
-                <Users className="h-4 w-4" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg">
-                  {team.name}
-                  {team.role === 'owner' && (
-                    <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-fg-subtle" title="You own this team">
-                      <Crown className="h-3 w-3" aria-hidden />
-                      Owner
-                    </span>
-                  )}
-                </p>
-                <p className="text-[12px] text-fg-subtle">
-                  <span className="font-mono">{team.code}</span> · {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
-                </p>
-              </div>
-              <CopyButton getText={() => team.code} label="Copy code" />
-              <Link href={`/projects/new?team=${team.id}`} className={btn.secondary}>
-                New project
-              </Link>
-            </li>
+            <TeamRow
+              key={team.id}
+              team={team}
+              onLeft={(next, text) => {
+                setTeams(next);
+                setMessage({ kind: 'ok', text });
+                router.refresh(); // the team's projects leave the sidebar and project list
+              }}
+              onError={(text) => setMessage({ kind: 'error', text })}
+              onMembersChanged={() => {
+                getMyTeams().then((r) => r.ok && setTeams(r.teams)); // member counts
+                router.refresh();
+              }}
+            />
           ))}
         </ul>
       )}
@@ -120,6 +112,128 @@ export function TeamsTab() {
         <StatusMessage id="team-code-msg" message={message} />
       </form>
     </div>
+  );
+}
+
+// One team: owners can open its member list and remove people; members can leave.
+function TeamRow({
+  team,
+  onLeft,
+  onError,
+  onMembersChanged,
+}: {
+  team: Team;
+  onLeft: (teams: Team[], message: string) => void;
+  onError: (message: string) => void;
+  onMembersChanged: () => void;
+}) {
+  const owner = team.role === 'owner';
+  const [members, setMembers] = useState<TeamMember[] | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function toggleMembers() {
+    const next = !showMembers;
+    setShowMembers(next);
+    if (next && !members) {
+      getTeamMembers(team.id).then((r) => (r.ok ? setMembers(r.members) : onError(r.error)));
+    }
+  }
+
+  function remove(member: TeamMember) {
+    if (!confirm(`Remove ${member.name} from ${team.name}? They lose access to its projects.`)) return;
+    startTransition(async () => {
+      const r = await removeTeamMember(team.id, member.id);
+      if (r.ok) {
+        setMembers(r.members);
+        onMembersChanged();
+      } else {
+        onError(r.error);
+      }
+    });
+  }
+
+  function leave() {
+    startTransition(async () => {
+      const r = await leaveTeam(team.id);
+      if (r.ok) onLeft(r.teams, r.message ?? `Left ${team.name}.`);
+      else onError(r.error);
+      setConfirmingLeave(false);
+    });
+  }
+
+  return (
+    <li className="p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted text-fg-muted">
+          <Users className="h-4 w-4" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg">
+            {team.name}
+            {owner && (
+              <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-fg-subtle" title="You own this team">
+                <Crown className="h-3 w-3" aria-hidden />
+                Owner
+              </span>
+            )}
+          </p>
+          <p className="text-[12px] text-fg-subtle">
+            <span className="font-mono">{team.code}</span> · {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
+          </p>
+        </div>
+        <CopyButton getText={() => team.code} label="Copy code" />
+        <Link href={`/projects/new?team=${team.id}`} className={btn.secondary}>
+          New project
+        </Link>
+        {owner ? (
+          <button type="button" onClick={toggleMembers} aria-expanded={showMembers} className={btn.ghost}>
+            Members
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showMembers ? 'rotate-180' : ''}`} aria-hidden />
+          </button>
+        ) : confirmingLeave ? (
+          <span className="flex items-center gap-1.5">
+            <button type="button" onClick={leave} disabled={pending} className={btn.danger}>
+              {pending ? 'Leaving…' : 'Confirm leave'}
+            </button>
+            <button type="button" onClick={() => setConfirmingLeave(false)} className={btn.ghost}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setConfirmingLeave(true)} className={btn.danger}>
+            <LogOut className="h-3.5 w-3.5" aria-hidden />
+            Leave
+          </button>
+        )}
+      </div>
+
+      {owner && showMembers && (
+        <div className="mt-3 border-t border-line pt-3">
+          {members === null ? (
+            <p className="text-[13px] text-fg-subtle">Loading members…</p>
+          ) : (
+            <ul aria-label={`Members of ${team.name}`} className="space-y-1">
+              {members.map((m) => (
+                <li key={m.id} className="flex items-center gap-2.5 text-[13px]">
+                  <Avatar name={m.name} avatar={m.avatar} size={24} />
+                  <span className="min-w-0 flex-1 truncate text-fg">{m.name}</span>
+                  <span className="text-[12px] capitalize text-fg-subtle">{m.role}</span>
+                  {m.role !== 'owner' && (
+                    <button type="button" onClick={() => remove(m)} disabled={pending} className={`${btn.danger} !h-7 !px-2`}>
+                      <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+              {members.length === 1 && <li className="text-[12px] text-fg-subtle">Just you so far. Share the code {team.code} to invite people.</li>}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
