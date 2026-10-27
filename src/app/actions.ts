@@ -7,6 +7,7 @@ import { cookies } from 'next/headers';
 import { AVATAR_KEY } from '@/lib/avatar';
 import { canSee, CURRENT_USER_COOKIE, getCurrentUser } from '@/lib/current-user';
 import { listMyTeams } from '@/lib/data';
+import { cleanReason, insertOutcome, isOutcomeResult } from '@/lib/outcomes';
 import { supabase } from '@/lib/supabase';
 import {
   assertValidBlockers,
@@ -24,6 +25,8 @@ import {
   DELIVERABLES,
   TASK_TYPES,
   type DeliverableKind,
+  type OutcomeResult,
+  type OutcomeSubject,
   type Member,
   type Profile,
   type TeamMember,
@@ -300,6 +303,42 @@ export async function logPrompt(taskId: string, projectId: string, rawPrompt: st
     const { data: task } = await db.from('tasks').select('id').eq('id', taskId).eq('project_id', projectId).maybeSingle();
     if (!task) throw new InvalidInput('That task is no longer on this board.');
     return db.from('task_prompts').insert({ task_id: taskId, tool: tool || null, prompt });
+  });
+}
+
+// ── Outcomes: was a prompt or the context successful, and why ───────────────
+
+/** Record whether a prompt (or the task's current context) worked, with the reason. */
+export async function recordOutcome(
+  taskId: string,
+  projectId: string,
+  input: { subject: OutcomeSubject; promptId: string | null; result: OutcomeResult; reason: string },
+): Promise<ActionResult> {
+  return run(projectId, async () => {
+    const user = await getCurrentUser();
+    await insertOutcome(supabase(), { taskId, projectId, ...input, recordedBy: user.name, memberId: user.id, source: 'human' });
+    return { error: null };
+  });
+}
+
+/** Change an outcome's result or reason (from inside its task). */
+export async function updateOutcome(outcomeId: string, projectId: string, input: { result: OutcomeResult; reason: string }): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(outcomeId)) throw new InvalidInput('Invalid outcome.');
+    if (!isOutcomeResult(input.result)) throw new InvalidInput('Choose Successful or Unsuccessful.');
+    const reason = cleanReason(input.reason);
+    return supabase()
+      .from('task_outcomes')
+      .update({ result: input.result, reason, updated_at: new Date().toISOString() })
+      .eq('id', outcomeId)
+      .eq('project_id', projectId);
+  });
+}
+
+export async function deleteOutcome(outcomeId: string, projectId: string): Promise<ActionResult> {
+  return run(projectId, async () => {
+    if (!UUID.test(outcomeId)) throw new InvalidInput('Invalid outcome.');
+    return supabase().from('task_outcomes').delete().eq('id', outcomeId).eq('project_id', projectId);
   });
 }
 

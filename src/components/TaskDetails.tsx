@@ -1,12 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { CalendarDays, CheckCircle2, Circle, Gauge, GitBranch, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Circle, Flag, Gauge, GitBranch, History, MessageSquareText, Pencil, Tag, User } from 'lucide-react';
 import { HEALTH_LABEL, contextHealth, healthBand } from '@/lib/health';
 import { isBlocked } from '@/lib/blocking';
 import BlockerManager, { type BlockerControls } from './BlockerManager';
 import HealthMeter from './HealthMeter';
 import PromptLogger from './PromptLogger';
+import TaskOutcomes from './TaskOutcomes';
 import { formatBriefing, hasContext } from '@/lib/context';
 import { dueLabel, dueState } from '@/lib/due';
 import { STAGES, type BoardTask, type Label, type Member } from '@/lib/types';
@@ -34,7 +35,7 @@ function timeAgo(iso: string) {
 }
 
 // Ticket view shown when a card is clicked. Everything is read-only except
-// "Hand off to…" (reassigns in one step), blockers, and "Log a prompt".
+// "Hand off to…" (reassigns in one step), blockers, "Log a prompt" and outcomes.
 export default function TaskDetails({
   task,
   taskLabel,
@@ -47,8 +48,10 @@ export default function TaskDetails({
   onHandOff,
   onEdit,
   onClose,
+  focusOutcomeId,
 }: {
   task: BoardTask;
+  focusOutcomeId?: string; // opened from Insights' outcome tree: show this outcome, ready to edit
   taskLabel?: Label;
   projectCode: string;
   members: Member[];
@@ -214,10 +217,11 @@ export default function TaskDetails({
             <Empty>No prompts logged yet. Paste the prompts you used with an AI to keep a record of how this task was built.</Empty>
           ) : (
             <ol className="relative space-y-3 border-l border-line pl-5">
-              {task.prompts.map((p) => (
+              {task.prompts.map((p, i) => (
                 <li key={p.id} className="relative">
                   <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-raised bg-brand" aria-hidden />
                   <div className="flex items-center gap-2 text-xs text-fg-subtle">
+                    <span className="font-mono font-semibold text-fg-muted">#{task.prompts.length - i}</span>
                     {p.tool && (
                       <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                         {p.tool}
@@ -234,6 +238,18 @@ export default function TaskDetails({
               ))}
             </ol>
           )}
+        </Section>
+
+        <Section
+          title="Outcomes"
+          icon={Flag}
+          aside={
+            task.outcomes.length
+              ? `${task.outcomes.filter((o) => o.result === 'success').length} successful · ${task.outcomes.filter((o) => o.result === 'failure').length} unsuccessful`
+              : undefined
+          }
+        >
+          <TaskOutcomes task={task} focusOutcomeId={focusOutcomeId} onChanged={() => router.refresh()} />
         </Section>
       </div>
 

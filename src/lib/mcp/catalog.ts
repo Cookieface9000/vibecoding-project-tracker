@@ -2,7 +2,19 @@
 // page builds the "Try it" forms from this list, and lib/mcp/tools.ts builds the input
 // schemas from the same fields, so the panel and the AI always see the same tools.
 
-export type ToolFieldType = 'project' | 'task' | 'status' | 'member' | 'ai-tool' | 'text' | 'longtext' | 'boolean' | 'number' | 'moves';
+export type ToolFieldType =
+  | 'project'
+  | 'task'
+  | 'status'
+  | 'member'
+  | 'ai-tool'
+  | 'outcome-result'
+  | 'outcome-subject'
+  | 'text'
+  | 'longtext'
+  | 'boolean'
+  | 'number'
+  | 'moves';
 
 export interface ToolField {
   name: string;
@@ -79,6 +91,14 @@ export const TOOL_CATALOG: ToolInfo[] = [
     fields: [PROJECT, { name: 'limit', type: 'number', help: 'How many entries (default 20, max 100).' }],
   },
   {
+    name: 'get_outcomes',
+    title: 'Get outcomes',
+    description:
+      "The outcome log the team recorded: for each task, which prompts and contexts worked or didn't, and why. Use it to reuse what worked and avoid what didn't.",
+    write: false,
+    fields: [PROJECT, { name: 'task', type: 'task', help: 'Only this task, e.g. DEMO-2.' }],
+  },
+  {
     name: 'get_deliverables',
     title: 'Get deliverables',
     description: 'The project\'s pinned links: presentation, demo, report and documentation.',
@@ -139,6 +159,27 @@ export const TOOL_CATALOG: ToolInfo[] = [
       TASK,
       { name: 'prompt', type: 'longtext', required: true, help: 'The prompt text.' },
       { name: 'tool', type: 'ai-tool', help: 'Which AI tool it was used with.' },
+    ],
+  },
+  {
+    name: 'record_outcome',
+    title: 'Record outcome (on instruction only)',
+    description:
+      "Record whether a prompt or the task's context was successful, and why. ONLY call this when the person you are working with explicitly tells you to record an outcome; never decide to record one yourself. " +
+      'Pass their exact words as operator_instruction and use the reason they gave. Works on the Demo Board only.',
+    write: true,
+    fields: [
+      TASK,
+      { name: 'about', type: 'outcome-subject', required: true, help: "context (the task's current context) or prompt." },
+      { name: 'prompt', type: 'number', help: 'For about = prompt: the prompt number from get_task (#1 is the oldest). Defaults to the latest.' },
+      { name: 'result', type: 'outcome-result', required: true, help: 'success or failure.' },
+      { name: 'reason', type: 'longtext', required: true, help: "Why it was or wasn't successful, as the person explained it." },
+      {
+        name: 'operator_instruction',
+        type: 'longtext',
+        required: true,
+        help: "The person's exact words asking you to record this outcome. Shown next to the outcome in the app.",
+      },
     ],
   },
   {

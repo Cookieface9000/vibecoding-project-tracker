@@ -88,6 +88,8 @@ async function Content() {
     summary: c.summary,
     ok: c.ok,
     projectId: typeof c.detail?.projectId === 'string' ? c.detail.projectId : null,
+    taskId: typeof c.detail?.taskId === 'string' ? c.detail.taskId : null,
+    outcomeId: typeof c.detail?.outcomeId === 'string' ? c.detail.outcomeId : null,
     historyId: typeof c.detail?.historyId === 'string' ? c.detail.historyId : null,
   }));
 

@@ -9,7 +9,19 @@ import { dueLabel } from '../due';
 import { contextHealth } from '../health';
 import { supabase } from '../supabase';
 import { assertValidBlockers, currentBlockerIds, InvalidInput, setTaskAssignee, setTaskStatus, UUID } from '../task-ops';
-import { CONTEXT_TOOLS, DELIVERABLES, STAGES, type BoardTask, type Project, type Status } from '../types';
+import { outcomeSubjectLabel } from '../outcome-labels';
+import { insertOutcome } from '../outcomes';
+import {
+  CONTEXT_TOOLS,
+  DELIVERABLES,
+  STAGES,
+  type BoardTask,
+  type OutcomeResult,
+  type OutcomeSubject,
+  type Project,
+  type Status,
+  type TaskOutcome,
+} from '../types';
 import { TOOL_CATALOG, toolInfo, type ToolField } from './catalog';
 import { recordCall, type CallerContext } from './connections';
 
@@ -42,6 +54,10 @@ function fieldSchema(field: ToolField) {
         return z.enum(STATUS_IDS);
       case 'ai-tool':
         return z.enum(CONTEXT_TOOLS);
+      case 'outcome-result':
+        return z.enum(['success', 'failure']);
+      case 'outcome-subject':
+        return z.enum(['context', 'prompt']);
       case 'boolean':
         return z.boolean();
       case 'number':
@@ -236,10 +252,13 @@ const TOOLS: Record<string, (args: Args, ctx: CallerContext) => Promise<ToolOutp
       task.prompts.length
         ? task.prompts
             .slice(0, 10)
-            .map((p) => `### ${when(p.createdAt)}${p.tool ? ` · ${p.tool}` : ''}\n${clip(p.prompt.trim(), 2000)}`)
+            .map((p, i) => `### Prompt #${task.prompts.length - i} · ${when(p.createdAt)}${p.tool ? ` · ${p.tool}` : ''}\n${clip(p.prompt.trim(), 2000)}`)
             .join('\n\n') + (task.prompts.length > 10 ? `\n\n_${task.prompts.length - 10} older prompts not shown._` : '')
         : '_No prompts logged._',
     );
+
+    out.push('', `## Outcomes (${task.outcomes.length}, oldest first)`);
+    out.push(task.outcomes.length ? task.outcomes.map((o) => outcomeLine(task, o)).join('\n') : '_No outcomes recorded._');
 
     out.push('', '## History');
     out.push(events.length ? events.map((e) => `- ${when(e.at)} · ${e.actor} ${describeEvent(e.kind, e.from, e.to)}`).join('\n') : '_No history._');
@@ -286,6 +305,67 @@ const TOOLS: Record<string, (args: Args, ctx: CallerContext) => Promise<ToolOutp
       text: `# Activity on ${board.project.name} (#${board.project.code}), newest first\n\n${rows.join('\n') || '_No activity yet._'}\n`,
       summary: `Read ${board.project.code} activity`,
       detail: { projectId: board.project.id },
+    };
+  },
+
+  async get_outcomes(args, ctx) {
+    const board = await loadBoard(await resolveProject(ctx, str(args, 'project')!));
+    const only = str(args, 'task') ? (await resolveTask(ctx, str(args, 'task')!, board)).task : null;
+    const tasks = (only ? [only] : board.tasks).filter((t) => t.outcomes.length);
+    const all = tasks.flatMap((t) => t.outcomes);
+    const ok = all.filter((o) => o.result === 'success').length;
+    const tree = tasks.map((t) => `- [${board.ref(t)}] ${t.title}\n${t.outcomes.map((o) => `  ${outcomeLine(t, o)}`).join('\n')}`);
+    return {
+      text:
+        `# Outcomes on ${board.project.name} (#${board.project.code})${only ? `, [${board.ref(only)}]` : ''}\n\n` +
+        (all.length ? `${ok} successful, ${all.length - ok} unsuccessful.\n\n${tree.join('\n')}\n` : '_No outcomes recorded yet._\n'),
+      summary: `Read ${only ? board.ref(only) : board.project.code} outcomes`,
+      detail: { projectId: board.project.id },
+    };
+  },
+
+  async record_outcome(args, ctx) {
+    const { board, task } = await resolveTask(ctx, str(args, 'task')!);
+    // AI connections may only record outcomes on the Demo Board, and only on a person's explicit instruction.
+    if (!board.project.isDemo) {
+      throw new InvalidInput('AI connections can only record outcomes on the Demo Board. Ask the person to record it themselves in the task.');
+    }
+    const instruction = str(args, 'operator_instruction')!.trim();
+    if (instruction.length < 10) {
+      throw new InvalidInput('Only record an outcome when the person explicitly asks, and pass their exact words as operator_instruction.');
+    }
+    if (instruction.length > 1000) throw new InvalidInput('Keep operator_instruction to 1000 characters or fewer.');
+
+    const subject = args.about as OutcomeSubject;
+    let promptId: string | null = null;
+    let what = 'context';
+    if (subject === 'prompt') {
+      if (!task.prompts.length) throw new InvalidInput(`[${board.ref(task)}] has no prompts logged.`);
+      const n = typeof args.prompt === 'number' ? args.prompt : task.prompts.length; // default: the latest
+      const prompt = task.prompts[task.prompts.length - n];
+      if (!prompt) throw new InvalidInput(`[${board.ref(task)}] has prompts #1 to #${task.prompts.length}.`);
+      promptId = prompt.id;
+      what = `prompt #${n}`;
+    }
+    const id = await insertOutcome(supabase(), {
+      taskId: task.id,
+      projectId: board.project.id,
+      subject,
+      promptId,
+      result: args.result as OutcomeResult,
+      reason: str(args, 'reason')!,
+      recordedBy: ctx.caller,
+      memberId: ctx.memberId,
+      source: 'ai',
+      operatorInstruction: instruction,
+    });
+    touch(board.project.id);
+    const ref = board.ref(task);
+    const verdict = args.result === 'success' ? 'successful' : 'unsuccessful';
+    return {
+      text: `Recorded the ${what} of [${ref}] ${task.title} as ${verdict}. The person can review or edit it in the task's Outcomes section.\n`,
+      summary: `Recorded ${ref} ${what} as ${verdict}`,
+      detail: { projectId: board.project.id, taskId: task.id, outcomeId: id },
     };
   },
 
@@ -439,6 +519,12 @@ async function moveOne(ctx: CallerContext, board: Board, task: BoardTask, to: St
   if (error) throw new Error(error.message);
   task.status = to;
   return `Moved [${ref}] ${task.title}: ${stageLabel(from)} → ${stageLabel(to)}.`;
+}
+
+function outcomeLine(task: BoardTask, o: TaskOutcome) {
+  const verdict = o.result === 'success' ? 'SUCCESSFUL' : 'UNSUCCESSFUL';
+  const by = `${o.recordedBy}${o.source === 'ai' ? " on a person's instruction" : ''}, ${when(o.createdAt)}`;
+  return `- ${verdict} · ${outcomeSubjectLabel(task, o)} · ${o.reason.replace(/\s+/g, ' ').trim()} (${by})`;
 }
 
 function describeEvent(kind: string, from: string | null, to: string | null) {

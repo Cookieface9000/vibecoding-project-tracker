@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import HealthMeter from '@/components/HealthMeter';
 import DependencyGraph from '@/components/insights/DependencyGraph';
 import HandoffMap from '@/components/insights/HandoffMap';
+import OutcomeTree from '@/components/insights/OutcomeTree';
 import PromptTimeline from '@/components/insights/PromptTimeline';
 import Notice, { SetupNotice } from '@/components/Notice';
 import ProjectHeader from '@/components/ProjectHeader';
@@ -107,6 +108,13 @@ export default async function InsightsPage({ params }: { params: Promise<{ id: s
             <DependencyGraph tasks={tasks} />
           </Panel>
         </div>
+
+        <Panel
+          title="Outcome tree"
+          subtitle="Which prompts and contexts worked, and why, as recorded by the team. Click any outcome to open it in its task and edit it."
+        >
+          <OutcomeTree projectId={project.id} projectCode={project.code} tasks={tasks} />
+        </Panel>
       </main>
     </>
   );

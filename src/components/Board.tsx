@@ -83,6 +83,8 @@ export default function Board({
   projectId,
   projectCode,
   project,
+  openTaskId,
+  focusOutcomeId,
 }: {
   tasks: BoardTask[];
   members: Member[];
@@ -90,6 +92,8 @@ export default function Board({
   projectId: string;
   projectCode: string;
   project: BoardProjectInfo;
+  openTaskId?: string; // from ?task=: open this task straight away (links from Insights)
+  focusOutcomeId?: string; // from ?outcome=: and show this outcome in it, ready to edit
 }) {
   // Local copy for optimistic drag-and-drop; resyncs whenever the server sends fresh data.
   // Cards that changed elsewhere (an AI connection, a teammate) and not on this page
@@ -115,7 +119,8 @@ export default function Board({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverTasks]);
 
-  const [modal, setModal] = useState<ModalState>(null);
+  const [modal, setModal] = useState<ModalState>(openTaskId ? { kind: 'view', id: openTaskId } : null);
+  const [focusOutcome, setFocusOutcome] = useState(focusOutcomeId);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -256,7 +261,12 @@ export default function Board({
 
   const activeTask = tasks.find((t) => t.id === activeId) ?? null;
   const modalTask = modal && (modal.kind === 'view' || modal.kind === 'edit') ? tasks.find((t) => t.id === modal.id) : undefined;
-  const close = () => setModal(null);
+  const close = () => {
+    setModal(null);
+    setFocusOutcome(undefined);
+    // Opened from a link (?task=…): drop it from the URL so a refresh doesn't reopen the task.
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+  };
 
   function onDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id));
@@ -418,6 +428,7 @@ export default function Board({
             blockerControls={blockerHandlers(modalTask)}
             onEdit={() => setModal({ kind: 'edit', id: modalTask.id, from: 'view' })}
             onClose={close}
+            focusOutcomeId={modalTask.id === openTaskId ? focusOutcome : undefined}
           />
         </Modal>
       )}

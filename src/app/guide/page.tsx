@@ -1,6 +1,7 @@
 import {
   ArrowRightLeft,
   Copy,
+  Flag,
   FolderPlus,
   GripVertical,
   History,
@@ -63,6 +64,7 @@ function sample(overrides: Partial<BoardTask>): BoardTask {
     contextTool: null,
     contextUpdatedAt: null,
     ref: 'DEMO-1',
+    outcomes: [],
     prompts: [],
     dependsOn: [],
     blockers: [],
@@ -225,6 +227,12 @@ export default function GuidePage() {
               Each task keeps a timeline of the prompts used on it, newest first, so you can see how the work got where it is. Open
               a task and use <strong className="text-fg">Log a prompt</strong> to paste one in and tag the AI tool; a connected AI
               can also log its own prompts.
+            </Feature>
+            <Feature icon={Flag} title="Outcomes">
+              After trying a prompt or a task&apos;s context, use <strong className="text-fg">Record an outcome</strong> in the task to note
+              whether it worked and why. The <strong className="text-fg">Outcome tree</strong> on a project&apos;s Insights page lists them all;
+              click one to open it in its task and edit it. On the Demo Board, a connected AI can record an outcome too, but only when you
+              tell it to, and your instruction is saved with it.
             </Feature>
           </Section>
 

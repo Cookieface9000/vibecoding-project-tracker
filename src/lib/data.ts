@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { canSee, getCurrentUser, type CurrentUser } from './current-user';
 import { averageHealth } from './health';
 import { supabase } from './supabase';
-import { DELIVERABLES, type BoardTask, type Deliverables, type Label, type Member, type Project, type Task, type TaskEvent, type Team } from './types';
+import { DELIVERABLES, type BoardTask, type Deliverables, type Label, type Member, type Project, type Task, type TaskEvent, type TaskOutcome, type Team } from './types';
 
 // Row shape in Postgres (snake_case) ↔ app shape (camelCase).
 interface TaskRow {
@@ -21,6 +21,36 @@ interface TaskRow {
   context: string;
   context_tool: Task['contextTool'];
   context_updated_at: string | null;
+}
+
+interface OutcomeRow {
+  id: string;
+  subject: TaskOutcome['subject'];
+  prompt_id: string | null;
+  context_snapshot: string | null;
+  result: TaskOutcome['result'];
+  reason: string;
+  recorded_by: string;
+  source: TaskOutcome['source'];
+  operator_instruction: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function outcomeFromRow(row: OutcomeRow): TaskOutcome {
+  return {
+    id: row.id,
+    subject: row.subject,
+    promptId: row.prompt_id,
+    contextSnapshot: row.context_snapshot,
+    result: row.result,
+    reason: row.reason,
+    recordedBy: row.recorded_by,
+    source: row.source,
+    operatorInstruction: row.operator_instruction,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 interface PromptRow {
@@ -207,19 +237,24 @@ export async function getProject(id: string): Promise<Project | null> {
 }
 
 /**
- * A project's tasks with their prompt history (newest prompt first), in one query.
+ * A project's tasks with their prompt history (newest prompt first) and outcomes (oldest first), in one query.
  * Each task gets its reference (DEMO-3): the project code + its position, oldest first.
  */
 export async function listTasks(project: Pick<Project, 'id' | 'code'>): Promise<BoardTask[]> {
   const { data, error } = await supabase()
     .from('tasks')
-    .select('*, task_prompts(id, tool, prompt, created_at), blockers:task_dependencies!task_dependencies_task_id_fkey(depends_on, active, created_at)')
+    .select(
+      '*, task_prompts(id, tool, prompt, created_at), blockers:task_dependencies!task_dependencies_task_id_fkey(depends_on, active, created_at), ' +
+        'task_outcomes(id, subject, prompt_id, context_snapshot, result, reason, recorded_by, source, operator_instruction, created_at, updated_at)',
+    )
     .eq('project_id', project.id)
     .order('created_at', { ascending: true })
     .order('id', { ascending: true }) // tie-break so references never swap
-    .order('created_at', { referencedTable: 'task_prompts', ascending: false });
+    .order('created_at', { referencedTable: 'task_prompts', ascending: false })
+    .order('created_at', { referencedTable: 'task_outcomes', ascending: true });
   if (error) throw new Error(`Failed to load tasks: ${error.message}`);
-  return (data as (TaskRow & { task_prompts: PromptRow[]; blockers: { depends_on: string; active: boolean; created_at: string }[] })[]).map((row, i) => ({
+  type Row = TaskRow & { task_prompts: PromptRow[]; blockers: { depends_on: string; active: boolean; created_at: string }[]; task_outcomes: OutcomeRow[] };
+  return (data as unknown as Row[]).map((row, i) => ({
     ...fromRow(row),
     ref: `${project.code}-${i + 1}`,
     prompts: row.task_prompts.map((p) => ({ id: p.id, tool: p.tool, prompt: p.prompt, createdAt: p.created_at })),
@@ -227,6 +262,7 @@ export async function listTasks(project: Pick<Project, 'id' | 'code'>): Promise<
     blockers: [...row.blockers]
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .map((b) => ({ taskId: b.depends_on, active: b.active })),
+    outcomes: row.task_outcomes.map(outcomeFromRow),
   }));
 }
 

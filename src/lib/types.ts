@@ -120,12 +120,37 @@ export interface PromptEntry {
   createdAt: string; // ISO timestamp
 }
 
-/** A task as shown on a board: includes its prompt history (newest first) and blockers. */
+// ── Outcomes ──
+// Whether a prompt, or the task's context, worked, and why: written by a person (or by an AI
+// connection on the Demo Board, only when a person explicitly tells it to).
+export const OUTCOME_RESULTS = [
+  { id: 'success', label: 'Successful' },
+  { id: 'failure', label: 'Unsuccessful' },
+] as const;
+export type OutcomeResult = (typeof OUTCOME_RESULTS)[number]['id'];
+export type OutcomeSubject = 'context' | 'prompt';
+
+export interface TaskOutcome {
+  id: string;
+  subject: OutcomeSubject;
+  promptId: string | null; // subject = 'prompt' (null if that prompt was deleted)
+  contextSnapshot: string | null; // subject = 'context': the context as it was when recorded
+  result: OutcomeResult;
+  reason: string;
+  recordedBy: string;
+  source: 'human' | 'ai';
+  operatorInstruction: string | null; // AI only: the person's words that asked for it
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A task as shown on a board: includes its prompt history (newest first), blockers and outcomes (oldest first). */
 export interface BoardTask extends Task {
   ref: string; // e.g. DEMO-3: project code + position on the board, oldest first. How AI connections name it.
   prompts: PromptEntry[];
   dependsOn: string[]; // ids of tasks this one is blocked by (active or not)
   blockers: { taskId: string; active: boolean }[]; // same links, with their "active" switch
+  outcomes: TaskOutcome[];
 }
 
 /** Something that happened to a task (feeds the handoff map). */

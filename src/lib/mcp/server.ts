@@ -13,7 +13,8 @@ import { inputShape, pickUpTaskPrompt, runTool, toolsFor } from './tools';
 const INSTRUCTIONS = `Vibe Tracker is a Kanban board for vibecoding work. Each task stores AI context (background, constraints, what was tried, where to pick up) and the prompts that produced it.
 Start with list_projects, then get_board for a project. Tasks are referred to as CODE-number (e.g. DEMO-3), the same numbering as the board.
 Columns are todo, in-progress, review and done. Blocked tasks can't move to review or done unless force is true.
-If this connection can write: after working on a task, update its context with update_context and record your prompts with log_prompt.`;
+If this connection can write: after working on a task, update its context with update_context and record your prompts with log_prompt.
+Outcomes (whether a prompt or context worked, and why) are a human judgement. Read them with get_outcomes. Only call record_outcome when the person explicitly tells you to, passing their exact words; it works on the Demo Board only.`;
 
 function createServer(ctx: CallerContext) {
   const server = new McpServer({ name: 'vibe-tracker', version: '1.0.0' }, { instructions: INSTRUCTIONS });

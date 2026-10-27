@@ -11,8 +11,14 @@ import type { BoardTask, Deliverables, Label, Member, Project } from '@/lib/type
 
 export const dynamic = 'force-dynamic';
 
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ task?: string; outcome?: string }>;
+}) {
+  const [{ id }, { task: openTask, outcome: focusOutcome }] = await Promise.all([params, searchParams]);
 
   if (!isSupabaseConfigured()) {
     return (
@@ -60,6 +66,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           projectId={project.id}
           projectCode={project.code}
           project={{ name: project.name, code: project.code, client: project.client, description: project.description, teamName: project.teamName }}
+          openTaskId={tasks.some((t) => t.id === openTask) ? openTask : undefined}
+          focusOutcomeId={focusOutcome}
         />
       </main>
     </>

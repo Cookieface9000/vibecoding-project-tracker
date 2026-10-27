@@ -160,7 +160,19 @@ function Field({
   }
 
   const options =
-    f.type === 'project' ? projectCodes : f.type === 'status' ? STAGES.map((s) => s.id) : f.type === 'member' ? members : f.type === 'ai-tool' ? [...CONTEXT_TOOLS] : null;
+    f.type === 'project'
+      ? projectCodes
+      : f.type === 'status'
+        ? STAGES.map((s) => s.id)
+        : f.type === 'member'
+          ? members
+          : f.type === 'ai-tool'
+            ? [...CONTEXT_TOOLS]
+            : f.type === 'outcome-result'
+              ? ['success', 'failure']
+              : f.type === 'outcome-subject'
+                ? ['context', 'prompt']
+                : null;
 
   return (
     <label className={f.type === 'longtext' || f.type === 'moves' ? 'sm:col-span-2' : ''}>

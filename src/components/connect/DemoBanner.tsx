@@ -10,7 +10,13 @@ import { useRememberedOpen } from '@/components/useRememberedOpen';
 // Shown above the Demo Board: what the board is for, and how its card references
 // (DEMO-3) line up with what an AI connection says and does.
 
-const EXAMPLES = ['Show me the DEMO board', "What's blocking DEMO-6?", 'Move DEMO-3 to Review', 'Hand DEMO-1 to Sam Patel'];
+const EXAMPLES = [
+  'Show me the DEMO board',
+  "What's blocking DEMO-6?",
+  'Move DEMO-3 to Review',
+  'Which prompts worked on DEMO?',
+  'Record DEMO-2 prompt #2 as successful: fake timers fixed the flaky test',
+];
 
 export default function DemoBanner() {
   const [pending, startTransition] = useTransition();

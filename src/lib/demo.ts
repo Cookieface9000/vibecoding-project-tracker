@@ -1,7 +1,7 @@
 import 'server-only';
 import { getCurrentUser } from './current-user';
 import { supabase } from './supabase';
-import { DELIVERABLES, type ContextTool, type Status, type TaskType } from './types';
+import { DELIVERABLES, type ContextTool, type OutcomeResult, type Status, type TaskType } from './types';
 
 // The Demo Board: a personal project a reviewer (or their AI) can rearrange freely.
 // resetDemoBoard() puts it back to this exact state, creating it the first time.
@@ -161,6 +161,43 @@ const DEMO_TASKS: DemoTask[] = [
   },
 ];
 
+// Example outcomes, so the Insights outcome tree has something to show.
+// `about`: 'context', or the prompt's number on that task (#1 = its oldest prompt).
+const DEMO_OUTCOMES: { task: number; about: 'context' | number; result: OutcomeResult; reason: string; by: string; hoursAgo: number }[] = [
+  {
+    task: 2,
+    about: 1,
+    result: 'success',
+    reason: 'The Postgres-only design worked first time and needed no new infrastructure. The table and query are now in the context.',
+    by: 'Me',
+    hoursAgo: 24,
+  },
+  {
+    task: 2,
+    about: 2,
+    result: 'failure',
+    reason: 'The tests passed locally but the "reset after the window" case was flaky because it used real timers. Next time ask for fake timers.',
+    by: 'Me',
+    hoursAgo: 2,
+  },
+  {
+    task: 3,
+    about: 'context',
+    result: 'success',
+    reason: 'The colour-blind constraint stopped the AI just making everything red. Contrast now passes and the urgency colours are still distinct.',
+    by: 'Alex Morgan',
+    hoursAgo: 18,
+  },
+  {
+    task: 7,
+    about: 1,
+    result: 'failure',
+    reason: 'The introduction came out generic and over the word limit. Giving it the outline and the 300-word cap up front should fix it.',
+    by: 'Me',
+    hoursAgo: 46,
+  },
+];
+
 const isoDate = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 
@@ -220,6 +257,26 @@ export async function resetDemoBoard(): Promise<string> {
   const idOf = (position: number) => tasks.find((row) => row.title === DEMO_TASKS[position - 1].title)!.id;
 
   const prompts = DEMO_TASKS.flatMap((t, i) => t.prompts.map((p) => ({ task_id: idOf(i + 1), tool: p.tool, prompt: p.prompt, created_at: ago(p.hoursAgo) })));
+  // Prompts first: the example outcomes point at them.
+  const { data: savedPrompts, error: promptError } = await db.from('task_prompts').insert(prompts).select('id, task_id, created_at');
+  if (promptError) throw new Error(`Couldn't fill the demo board: ${promptError.message}`);
+  const promptOf = (task: number, n: number) =>
+    (savedPrompts ?? []).filter((p) => p.task_id === idOf(task)).sort((a, b) => a.created_at.localeCompare(b.created_at))[n - 1]?.id ?? null;
+  const { data: members } = await db.from('members').select('id, name');
+  const outcomes = DEMO_OUTCOMES.map((o) => ({
+    task_id: idOf(o.task),
+    project_id: projectId,
+    subject: o.about === 'context' ? 'context' : 'prompt',
+    prompt_id: o.about === 'context' ? null : promptOf(o.task, o.about),
+    context_snapshot: o.about === 'context' ? DEMO_TASKS[o.task - 1].context : null,
+    result: o.result,
+    reason: o.reason,
+    recorded_by: o.by,
+    member_id: members?.find((m) => m.name === o.by)?.id ?? null,
+    source: 'human',
+    created_at: ago(o.hoursAgo),
+    updated_at: ago(o.hoursAgo),
+  }));
   const links = DEMO_TASKS.flatMap((t, i) => t.blockedBy.map((b) => ({ task_id: idOf(i + 1), depends_on: idOf(b), active: true })));
   type EventRow = { task_id: string; project_id: string; kind: string; from_value: string | null; to_value: string; actor: string; created_at: string };
   const events = DEMO_TASKS.flatMap((t, i): EventRow[] => {
@@ -231,7 +288,7 @@ export async function resetDemoBoard(): Promise<string> {
   events.push({ task_id: idOf(3), project_id: projectId, kind: 'handoff', from_value: 'Me', to_value: 'Alex Morgan', actor: 'Me', created_at: ago(40) });
 
   const results = await Promise.all([
-    prompts.length ? db.from('task_prompts').insert(prompts) : null,
+    db.from('task_outcomes').insert(outcomes),
     db.from('task_dependencies').insert(links),
     db.from('task_events').insert(events),
   ]);

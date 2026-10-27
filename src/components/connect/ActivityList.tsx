@@ -17,6 +17,8 @@ export interface ActivityRow {
   summary: string;
   ok: boolean;
   projectId: string | null;
+  taskId: string | null; // link straight to the task it touched…
+  outcomeId: string | null; // …and the outcome it recorded
   historyId: string | null; // set for update_context: the version it replaced
 }
 
@@ -71,8 +73,11 @@ export default function ActivityList({ calls }: { calls: ActivityRow[] }) {
             </button>
           )}
           {row.projectId && (
-            <Link href={`/projects/${row.projectId}`} className={btn.ghost}>
-              Board
+            <Link
+              href={`/projects/${row.projectId}${row.taskId ? `?task=${row.taskId}${row.outcomeId ? `&outcome=${row.outcomeId}` : ''}` : ''}`}
+              className={btn.ghost}
+            >
+              {row.outcomeId ? 'Outcome' : row.taskId ? 'Task' : 'Board'}
             </Link>
           )}
         </li>
