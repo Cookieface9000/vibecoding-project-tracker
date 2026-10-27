@@ -8,6 +8,8 @@ import {
   MessageSquareText,
   MousePointerClick,
   Pencil,
+  Play,
+  Plug,
   Plus,
   Settings,
   type LucideIcon,
@@ -31,6 +33,7 @@ const SECTIONS = [
   { id: 'board', title: 'Reading the board' },
   { id: 'tasks', title: 'Working with tasks' },
   { id: 'context', title: 'AI context and prompts' },
+  { id: 'connect', title: 'Connect an AI' },
   { id: 'settings', title: 'Settings and accessibility' },
   { id: 'shortcuts', title: 'Keyboard shortcuts' },
 ];
@@ -223,7 +226,33 @@ export default function GuidePage() {
             </Feature>
           </Section>
 
-          <Section id="settings" n={6} title="Settings and accessibility">
+          <Section id="connect" n={6} title="Connect an AI">
+            <p>
+              Vibe Tracker is also an MCP server, so an AI like Claude can read your boards and stored context directly, and move
+              tasks for you, instead of you copying and pasting.
+            </p>
+            <Feature icon={Plug} title="Create a connection">
+              Open <Ref>Connect an AI</Ref> in the sidebar and create a connection. Choose read only or &ldquo;can move tasks&rdquo;,
+              which projects it can see and when it expires. Paste its URL into Claude as a custom connector, or run the Claude
+              Code command it shows.
+            </Feature>
+            <Feature icon={Play} title="Try it without an AI">
+              The <strong className="text-fg">Try it</strong> panel runs the same tools from the page and shows exactly what an
+              AI would receive.
+            </Feature>
+            <Feature icon={History} title="See and undo what it did">
+              Every call is listed under <strong className="text-fg">AI activity</strong>. Moves and handoffs also appear in the
+              board&apos;s history under the connection&apos;s name, and a replaced context can be restored. Cards an AI changes
+              light up on an open board within about 15 seconds.
+            </Feature>
+            <div>
+              <Link href="/connect" className={btn.secondary}>
+                Connect an AI
+              </Link>
+            </div>
+          </Section>
+
+          <Section id="settings" n={7} title="Settings and accessibility">
             <Feature icon={Settings} title="Settings">
               Open <Ref>Settings</Ref> from the bottom of the sidebar (or press <Kbd>,</Kbd>). Profile and Teams are previews of
               account features that are coming.
@@ -246,7 +275,7 @@ export default function GuidePage() {
             </ul>
           </Section>
 
-          <Section id="shortcuts" n={7} title="Keyboard shortcuts">
+          <Section id="shortcuts" n={8} title="Keyboard shortcuts">
             <p>Single-key shortcuts work anywhere except while typing or when a dialog is open.</p>
             <ShortcutList />
           </Section>

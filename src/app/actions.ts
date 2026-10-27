@@ -7,9 +7,19 @@ import { canSee, getCurrentUser } from '@/lib/current-user';
 import { listMyTeams } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import {
+  assertValidBlockers,
+  currentBlockerIds,
+  InvalidInput,
+  isStatus,
+  logEvent,
+  setTaskAssignee,
+  setTaskStatus,
+  UUID,
+  type Db,
+} from '@/lib/task-ops';
+import {
   CONTEXT_TOOLS,
   DELIVERABLES,
-  STAGES,
   TASK_TYPES,
   type DeliverableKind,
   type Status,
@@ -17,10 +27,8 @@ import {
   type Team,
 } from '@/lib/types';
 
-// Server actions: the only write path to Supabase. Inputs come from the
-// browser, so validate everything before it reaches the database.
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Server actions: the web app's write path to Supabase (AI connections write through
+// lib/mcp). Inputs come from the browser, so validate everything before it reaches the database.
 
 // ── Projects ────────────────────────────────────────────────────────────────
 
@@ -78,12 +86,6 @@ export async function createProject(_prev: ProjectFormState, formData: FormData)
 // Return a result instead of throwing: thrown messages are hidden in production.
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
-
-class InvalidInput extends Error {}
-
-function isStatus(value: unknown): value is Status {
-  return STAGES.some((s) => s.id === value);
-}
 
 async function validate(input: TaskInput) {
   const title = input.title?.trim();
@@ -143,66 +145,6 @@ async function run(projectId: string, work: () => Promise<{ error: { message: st
   revalidatePath(`/projects/${projectId}`);
   revalidatePath('/');
   return { ok: true };
-}
-
-type Db = ReturnType<typeof supabase>;
-
-/** Record what happened to a task. History is best-effort: it never blocks the change itself. */
-async function logEvent(
-  db: Db,
-  e: { taskId: string; projectId: string; kind: 'created' | 'moved' | 'handoff'; from?: string | null; to?: string | null },
-) {
-  const user = await getCurrentUser();
-  await db.from('task_events').insert({
-    task_id: e.taskId,
-    project_id: e.projectId,
-    kind: e.kind,
-    from_value: e.from ?? null,
-    to_value: e.to ?? null,
-    actor: user.name,
-  });
-}
-
-/**
- * Check that `taskId` may be blocked by exactly `ids`: other tasks in the same project, and
- * no cycle (A blocked by B blocked by A) — inactive links count too, so a loop can't appear
- * later just by switching a link back on.
- */
-async function assertValidBlockers(db: Db, projectId: string, taskId: string, ids: string[]) {
-  if (ids.some((id) => !UUID.test(id))) throw new InvalidInput('Invalid blocking task.');
-  if (ids.includes(taskId)) throw new InvalidInput("A task can't block itself.");
-
-  const { data: projectTasks, error } = await db.from('tasks').select('id').eq('project_id', projectId);
-  if (error) throw new Error(error.message);
-  const inProject = new Set((projectTasks ?? []).map((t) => t.id as string));
-  if (!inProject.has(taskId) || ids.some((id) => !inProject.has(id))) {
-    throw new InvalidInput('Blocking tasks must be in the same project.');
-  }
-
-  const { data: edges } = await db.from('task_dependencies').select('task_id, depends_on').in('task_id', [...inProject]);
-  const graph = new Map<string, string[]>();
-  for (const e of edges ?? []) if (e.task_id !== taskId) graph.set(e.task_id, [...(graph.get(e.task_id) ?? []), e.depends_on]);
-  graph.set(taskId, ids);
-  const reachesTask = (from: string, seen = new Set<string>()): boolean => {
-    for (const next of graph.get(from) ?? []) {
-      if (next === taskId) return true;
-      if (!seen.has(next)) {
-        seen.add(next);
-        if (reachesTask(next, seen)) return true;
-      }
-    }
-    return false;
-  };
-  if (ids.some((id) => reachesTask(id))) {
-    throw new InvalidInput('That would create a loop: a task would end up blocking itself.');
-  }
-}
-
-/** Current blocker ids of a task. */
-async function currentBlockerIds(db: Db, taskId: string): Promise<string[]> {
-  const { data, error } = await db.from('task_dependencies').select('depends_on').eq('task_id', taskId);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((d) => d.depends_on as string);
 }
 
 /**
@@ -327,12 +269,7 @@ export async function moveTask(id: string, projectId: string, status: Status): P
   return run(projectId, async () => {
     if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
     if (!isStatus(status)) throw new InvalidInput('Choose a valid status.');
-    const db = supabase();
-    const { data: current } = await db.from('tasks').select('status').eq('id', id).eq('project_id', projectId).single();
-    const { error } = await db.from('tasks').update({ status }).eq('id', id).eq('project_id', projectId);
-    if (!error && current && current.status !== status) {
-      await logEvent(db, { taskId: id, projectId, kind: 'moved', from: current.status, to: status });
-    }
+    const { error } = await setTaskStatus(supabase(), id, projectId, status);
     return { error };
   });
 }
@@ -341,14 +278,7 @@ export async function moveTask(id: string, projectId: string, status: Status): P
 export async function handOffTask(id: string, projectId: string, assignee: string): Promise<ActionResult> {
   return run(projectId, async () => {
     if (!UUID.test(id) || !UUID.test(projectId)) throw new InvalidInput('Invalid task.');
-    const db = supabase();
-    const { data: member } = await db.from('members').select('name').eq('name', assignee).maybeSingle();
-    if (!member) throw new InvalidInput('Choose someone from the list.');
-    const { data: current } = await db.from('tasks').select('assignee').eq('id', id).eq('project_id', projectId).single();
-    const { error } = await db.from('tasks').update({ assignee: member.name }).eq('id', id).eq('project_id', projectId);
-    if (!error && current && current.assignee !== member.name) {
-      await logEvent(db, { taskId: id, projectId, kind: 'handoff', from: current.assignee, to: member.name });
-    }
+    const { error } = await setTaskAssignee(supabase(), id, projectId, assignee);
     return { error };
   });
 }

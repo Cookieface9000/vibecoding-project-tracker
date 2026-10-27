@@ -1,8 +1,9 @@
 node_modules
 dist
+# Every env file holds secrets; only the template is committed.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 .DS_Store
 .idea
 .vscode
@@ -19,7 +20,7 @@ out/
 
 # Local tool state (may contain machine paths / project IDs)
 .vercel/
-.claude/settings.local.json
+.claude/
 
 # MCP config (contains Supabase project ref)
 .mcp.json

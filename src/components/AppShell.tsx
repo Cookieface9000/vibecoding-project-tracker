@@ -1,4 +1,4 @@
-import { BookOpen, LayoutGrid, Plus } from 'lucide-react';
+import { BookOpen, LayoutGrid, Plug, Plus } from 'lucide-react';
 import Link from 'next/link';
 import SettingsButton from '@/components/settings/SettingsButton';
 import Collapsible from '@/components/Collapsible';
@@ -16,11 +16,13 @@ export default async function AppShell({
   activeProjectId,
   allProjectsActive = false,
   guideActive = false,
+  connectActive = false,
   children,
 }: {
   activeProjectId?: string;
   allProjectsActive?: boolean;
   guideActive?: boolean;
+  connectActive?: boolean;
   children: React.ReactNode;
 }) {
   let projects: Project[] = [];
@@ -71,6 +73,10 @@ export default async function AppShell({
           <Link href="/guide" aria-current={guideActive ? 'page' : undefined} className={`${navItem} ${guideActive ? navActive : navIdle} mt-px`}>
             <BookOpen className="h-4 w-4" aria-hidden />
             Guide
+          </Link>
+          <Link href="/connect" aria-current={connectActive ? 'page' : undefined} className={`${navItem} ${connectActive ? navActive : navIdle} mt-px`}>
+            <Plug className="h-4 w-4" aria-hidden />
+            Connect an AI
           </Link>
         </nav>
 

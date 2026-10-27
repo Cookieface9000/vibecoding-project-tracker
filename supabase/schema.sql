@@ -37,6 +37,7 @@ create table if not exists public.projects (
   client       text not null default '' check (char_length(client) <= 80),
   description  text not null default '' check (char_length(description) <= 500),
   status       text not null default 'active' check (status in ('active', 'on-hold', 'completed')),
+  is_demo      boolean not null default false,  -- the demo board, reset from the Connect page
   created_at   timestamptz not null default now()
 );
 
@@ -124,3 +125,48 @@ create index if not exists task_dependencies_depends_on_idx on public.task_depen
 
 alter table public.task_events enable row level security;
 alter table public.task_dependencies enable row level security;
+
+-- AI connections (MCP): each has a secret that is part of its connector URL. Only a SHA-256
+-- hash of the secret is stored; `token_hint` is its first characters, to tell them apart.
+create table if not exists public.mcp_connections (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null check (char_length(btrim(name)) between 1 and 60),
+  token_hash    text not null unique,
+  token_hint    text not null,
+  can_write     boolean not null default false,
+  project_id    uuid references public.projects (id) on delete cascade,   -- null = every project you can see
+  created_by    uuid references public.members (id) on delete set null,
+  created_at    timestamptz not null default now(),
+  expires_at    timestamptz not null,
+  last_used_at  timestamptz,
+  revoked_at    timestamptz
+);
+
+-- Every tool call made by an AI connection or the in-app "Try it" panel.
+create table if not exists public.mcp_calls (
+  id             uuid primary key default gen_random_uuid(),
+  connection_id  uuid references public.mcp_connections (id) on delete cascade,  -- null = Try it panel
+  caller         text not null,
+  tool           text not null,
+  summary        text not null default '',
+  ok             boolean not null,
+  detail         jsonb,
+  created_at     timestamptz not null default now()
+);
+create index if not exists mcp_calls_created_idx on public.mcp_calls (created_at desc);
+create index if not exists mcp_calls_connection_idx on public.mcp_calls (connection_id, created_at desc);
+
+-- Previous versions of a task's context, saved whenever an AI replaces it.
+create table if not exists public.task_context_history (
+  id            uuid primary key default gen_random_uuid(),
+  task_id       uuid not null references public.tasks (id) on delete cascade,
+  context       text not null,
+  context_tool  text,
+  replaced_by   text not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists task_context_history_task_idx on public.task_context_history (task_id, created_at desc);
+
+alter table public.mcp_connections enable row level security;
+alter table public.mcp_calls enable row level security;
+alter table public.task_context_history enable row level security;

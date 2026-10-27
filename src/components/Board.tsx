@@ -16,6 +16,7 @@ import {
   type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { addBlocker, createBlockerTask, deleteAllTasks, handOffTask, moveTask, removeBlocker, type ActionResult } from '@/app/actions';
 import { isBlocked } from '@/lib/blocking';
@@ -91,8 +92,28 @@ export default function Board({
   project: BoardProjectInfo;
 }) {
   // Local copy for optimistic drag-and-drop; resyncs whenever the server sends fresh data.
+  // Cards that changed elsewhere (an AI connection, a teammate) and not on this page
+  // are highlighted for a moment, so you can see what happened.
   const [tasks, setTasks] = useState(serverTasks);
-  useEffect(() => setTasks(serverTasks), [serverTasks]);
+  const [remoteIds, setRemoteIds] = useState<Set<string>>(new Set());
+  const polled = useRef(false); // set when the background refresh (below) asked for this data
+  useEffect(() => {
+    const local = new Map(tasks.map((t) => [t.id, t]));
+    const changed = polled.current
+      ? serverTasks.filter((t) => {
+          const mine = local.get(t.id);
+          return mine && (mine.status !== t.status || mine.assignee !== t.assignee);
+        })
+      : [];
+    polled.current = false;
+    setTasks(serverTasks);
+    if (changed.length === 0) return;
+    setRemoteIds(new Set(changed.map((t) => t.id)));
+    const timer = setTimeout(() => setRemoteIds(new Set()), 2600);
+    return () => clearTimeout(timer);
+    // Compare against the local copy as it was when the new data arrived.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverTasks]);
 
   const [modal, setModal] = useState<ModalState>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -105,6 +126,25 @@ export default function Board({
   // Motion cues: the card just dropped settles in; the card just handed off glows.
   const [settledId, setSettledId] = useState<string | null>(null);
   const [glowId, setGlowId] = useState<string | null>(null);
+
+  // Pick up changes made elsewhere: refresh every 15 s while the tab is visible, and on
+  // returning to it. Skipped mid-drag or while a task form is open.
+  const router = useRouter();
+  const busy = useRef(false);
+  busy.current = activeId !== null || modal?.kind === 'edit' || modal?.kind === 'create';
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || busy.current) return;
+      polled.current = true;
+      router.refresh();
+    };
+    const timer = setInterval(refresh, 15_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [router]);
 
   // A task is blocked while any of its blockers isn't done.
   const blockedIds = useMemo(() => {
@@ -336,6 +376,7 @@ export default function Board({
               blockedIds={blockedIds}
               settledId={settledId}
               glowId={glowId}
+              remoteIds={remoteIds}
               projectCode={projectCode}
               onOpen={open}
               onAdd={() => setModal({ kind: 'create', status: stage.id })}
@@ -411,6 +452,7 @@ function Column({
   blockedIds,
   settledId,
   glowId,
+  remoteIds,
   projectCode,
   onOpen,
   onAdd,
@@ -422,6 +464,7 @@ function Column({
   blockedIds: Set<string>;
   settledId: string | null;
   glowId: string | null;
+  remoteIds: Set<string>; // changed elsewhere since the last refresh
   projectCode: string;
   onOpen: (id: string) => void;
   onAdd: () => void;
@@ -463,8 +506,8 @@ function Column({
             task={task}
             label={labelOf(task)}
             blocked={blockedIds.has(task.id)}
-            settle={settledId === task.id}
-            glow={glowId === task.id}
+            settle={settledId === task.id || remoteIds.has(task.id)}
+            glow={glowId === task.id || remoteIds.has(task.id)}
             projectCode={projectCode}
             onOpen={() => onOpen(task.id)}
           />
