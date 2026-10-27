@@ -1,6 +1,5 @@
 import { AlarmClock, ArrowUpRight, FolderPlus, Plus, User, Users } from 'lucide-react';
 import Link from 'next/link';
-import AppShell from '@/components/AppShell';
 import Collapsible from '@/components/Collapsible';
 import { btn } from '@/components/ui';
 import HealthMeter from '@/components/HealthMeter';
@@ -43,7 +42,7 @@ export default async function ProjectsPage() {
   }
 
   return (
-    <AppShell allProjectsActive>
+    <>
       <PageHeader
         actions={
           <Link href="/projects/new" className={btn.primary}>
@@ -56,7 +55,7 @@ export default async function ProjectsPage() {
         {count !== null && <span className="tabular text-[13px] text-fg-subtle">{count}</span>}
       </PageHeader>
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">{content}</main>
-    </AppShell>
+    </>
   );
 }
 

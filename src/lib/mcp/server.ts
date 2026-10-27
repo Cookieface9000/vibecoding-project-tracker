@@ -88,5 +88,6 @@ export async function handleMcpRequest(req: Request, secret: string | null): Pro
       void server.close();
     }
   };
-  return ctx.memberId ? runAsMember(ctx.memberId, handle) : handle();
+  if (!ctx.memberId) return jsonError(401, "This connection's owner no longer exists. Create a new connection on the Connect an AI page.");
+  return runAsMember(ctx.memberId, handle);
 }

@@ -1,6 +1,5 @@
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import AppShell from '@/components/AppShell';
 import NewProjectForm from '@/components/NewProjectForm';
 import { SetupNotice } from '@/components/Notice';
 import PageHeader from '@/components/PageHeader';
@@ -24,7 +23,7 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
   const defaultTeamId = teams.find((t) => t.id === team)?.id ?? teams[0]?.id ?? '';
 
   return (
-    <AppShell>
+    <>
       <PageHeader>
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]">
           <Link href="/" className="text-fg-subtle hover:text-fg">
@@ -43,6 +42,6 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
         </div>
         {isSupabaseConfigured() ? <NewProjectForm teams={teams} defaultTeamId={defaultTeamId} /> : <SetupNotice />}
       </main>
-    </AppShell>
+    </>
   );
 }

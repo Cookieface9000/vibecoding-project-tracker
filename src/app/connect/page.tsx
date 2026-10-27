@@ -1,4 +1,3 @@
-import AppShell from '@/components/AppShell';
 import ActivityList, { type ActivityRow } from '@/components/connect/ActivityList';
 import ConnectionForm from '@/components/connect/ConnectionForm';
 import ConnectionList, { type ConnectionRow } from '@/components/connect/ConnectionList';
@@ -39,13 +38,13 @@ function untilText(iso: string, now: number) {
 
 export default async function ConnectPage() {
   return (
-    <AppShell connectActive>
+    <>
       <PageHeader>
         <h1 className="text-[14px] font-semibold text-fg">Connect an AI</h1>
         <span className="hidden text-[13px] text-fg-subtle sm:inline">Let Claude read and move your board</span>
       </PageHeader>
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">{isSupabaseConfigured() ? <Content /> : <SetupNotice />}</main>
-    </AppShell>
+    </>
   );
 }
 

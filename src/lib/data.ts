@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { canSee, getCurrentUser, type CurrentUser } from './current-user';
 import { averageHealth } from './health';
 import { supabase } from './supabase';
@@ -83,11 +84,14 @@ function projectFromRow(row: ProjectRow, user: CurrentUser): Project {
   };
 }
 
+// The list* loaders below are wrapped in React's cache(): the sidebar and the page both ask for
+// them, and this way each runs one database query per request instead of two.
+
 /**
  * Projects the current user can see: their personal projects, every project in their teams,
  * and the Demo Board (same rule as canSee).
  */
-export async function listProjects(): Promise<Project[]> {
+export const listProjects = cache(async (): Promise<Project[]> => {
   const user = await getCurrentUser();
   const visibility = [`and(team_id.is.null,created_by.eq.${user.id})`, 'is_demo.eq.true'];
   if (user.teamIds.length) visibility.push(`team_id.in.(${user.teamIds.join(',')})`);
@@ -99,7 +103,7 @@ export async function listProjects(): Promise<Project[]> {
     .order('created_at', { ascending: true });
   if (error) throw new Error(`Failed to load projects: ${error.message}`);
   return (data as unknown as ProjectRow[]).filter((row) => canSee(user, row)).map((row) => projectFromRow(row, user));
-}
+});
 
 export interface ProjectSummary extends Project {
   counts: Record<Task['status'], number>;
@@ -143,7 +147,7 @@ export async function listProjectSummaries(): Promise<ProjectSummary[]> {
 }
 
 /** Teams the current user belongs to, with their role and the team size. */
-export async function listMyTeams(): Promise<Team[]> {
+export const listMyTeams = cache(async (): Promise<Team[]> => {
   const user = await getCurrentUser();
   const { data, error } = await supabase()
     .from('team_members')
@@ -175,27 +179,27 @@ export async function listMyTeams(): Promise<Team[]> {
       memberCount: r.team.team_members[0]?.count ?? 0,
       ownerName: r.team.owners.find((o) => o.role === 'owner')?.member?.name ?? null,
     }));
-}
+});
 
 /** Placeholder people tasks can be assigned to. */
-export async function listMembers(): Promise<Member[]> {
+export const listMembers = cache(async (): Promise<Member[]> => {
   const { data, error } = await supabase().from('members').select('id, name, avatar').order('created_at', { ascending: true });
   if (error) throw new Error('Failed to load members: ' + error.message);
   return data as Member[];
-}
+});
 
 /** Colour labels tasks can be tagged with. */
-export async function listLabels(): Promise<Label[]> {
+export const listLabels = cache(async (): Promise<Label[]> => {
   const { data, error } = await supabase().from('labels').select('id, name, color').order('created_at', { ascending: true });
   if (error) throw new Error('Failed to load labels: ' + error.message);
   return data as Label[];
-}
+});
 
 /** Returns null for unknown ids, malformed ids, or projects the current user can't see. */
 export async function getProject(id: string): Promise<Project | null> {
   if (!UUID.test(id)) return null;
-  const user = await getCurrentUser();
-  const { data, error } = await supabase().from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle();
+  // Load the project and the user side by side; visibility is checked once both arrive.
+  const [user, { data, error }] = await Promise.all([getCurrentUser(), supabase().from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle()]);
   if (error) throw new Error(`Failed to load project: ${error.message}`);
   if (!data) return null;
   const row = data as unknown as ProjectRow;

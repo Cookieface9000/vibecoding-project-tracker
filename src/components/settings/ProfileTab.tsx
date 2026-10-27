@@ -1,9 +1,9 @@
 'use client';
 
-import { Shuffle } from 'lucide-react';
+import { LogOut, Shuffle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { getProfile, updateProfile } from '@/app/actions';
+import { getProfile, signOut, updateProfile } from '@/app/actions';
 import { LETTER_KEYS, randomPatternKeys } from '@/lib/avatar';
 import type { Profile } from '@/lib/types';
 import Avatar from '../Avatar';
@@ -20,6 +20,7 @@ export default function ProfileTab() {
   const [patterns, setPatterns] = useState<string[]>([]);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [signingOut, startSignOut] = useTransition();
 
   useEffect(() => {
     setPatterns(randomPatternKeys(8));
@@ -69,8 +70,7 @@ export default function ProfileTab() {
     <form onSubmit={save}>
       <PanelTitle title="User profile" description="How you appear to teammates." />
       <PlaceholderNote>
-        There&apos;s no sign-in yet: switch between users with &ldquo;Acting as&rdquo; at the bottom of the sidebar. Changes here apply to the user
-        you&apos;re acting as.
+        Demo sign-in: there are no passwords. To be someone else, sign out and choose another user on the sign-in page.
       </PlaceholderNote>
 
       <div className="mb-5 flex items-center gap-4">
@@ -151,6 +151,10 @@ export default function ProfileTab() {
       </div>
 
       <div className="mt-6 flex items-center justify-end gap-3">
+        <button type="button" onClick={() => startSignOut(() => signOut())} disabled={signingOut} className={`${btn.ghost} mr-auto`}>
+          <LogOut className="h-4 w-4" aria-hidden />
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </button>
         {message && (
           <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-[13px] ${message.kind === 'error' ? 'text-red-700 dark:text-red-300' : 'text-brand-ink'}`}>
             {message.text}

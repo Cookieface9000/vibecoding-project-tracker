@@ -479,12 +479,25 @@ export async function updateProfile(input: { name: string; username: string; ema
   return { ok: true, profile: { id: user.id, name, username, email, avatar: input.avatar }, message: 'Profile saved.' };
 }
 
-/** Act as another member (stand-in for signing in, until accounts exist). */
-export async function switchUser(memberId: string): Promise<ActionResult> {
-  if (!UUID.test(memberId)) return { ok: false, error: 'Invalid user.' };
-  const { data } = await supabase().from('members').select('id').eq('id', memberId).maybeSingle();
-  if (!data) return { ok: false, error: 'That user no longer exists.' };
-  (await cookies()).set(CURRENT_USER_COOKIE, memberId, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
+// Demo sign-in (lib/current-user.ts): no passwords and no registering, only existing users.
+
+/**
+ * Sign in as an existing user by username, then go to `next` (where they were heading).
+ * Returns an error message instead of redirecting when the username doesn't match anyone.
+ */
+export async function signIn(rawUsername: string, next: string): Promise<{ error: string }> {
+  const username = rawUsername.trim().toLowerCase().replace(/^@/, '');
+  if (!username) return { error: 'Choose a user or enter a username.' };
+  const { data } = await supabase().from('members').select('id').eq('username', username).maybeSingle();
+  if (!data) return { error: `No user called @${username}. New accounts can't be created; pick an existing user.` };
+  (await cookies()).set(CURRENT_USER_COOKIE, data.id, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
   revalidatePath('/', 'layout');
-  return { ok: true };
+  // Only ever go back to a page on this site.
+  redirect(next.startsWith('/') && !next.startsWith('//') ? next : '/');
+}
+
+export async function signOut(): Promise<void> {
+  (await cookies()).delete(CURRENT_USER_COOKIE);
+  revalidatePath('/', 'layout');
+  redirect('/sign-in');
 }

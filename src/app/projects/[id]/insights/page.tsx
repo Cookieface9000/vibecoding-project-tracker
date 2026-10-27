@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation';
-import AppShell from '@/components/AppShell';
 import HealthMeter from '@/components/HealthMeter';
 import DependencyGraph from '@/components/insights/DependencyGraph';
 import HandoffMap from '@/components/insights/HandoffMap';
@@ -20,11 +19,11 @@ export default async function InsightsPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   if (!isSupabaseConfigured()) {
     return (
-      <AppShell>
+      <>
         <main className="p-6">
           <SetupNotice />
         </main>
-      </AppShell>
+      </>
     );
   }
 
@@ -36,11 +35,11 @@ export default async function InsightsPage({ params }: { params: Promise<{ id: s
     if (project) [tasks, events] = await Promise.all([listTasks(project), listEvents(project.id)]);
   } catch (err) {
     return (
-      <AppShell activeProjectId={id}>
+      <>
         <main className="p-6">
           <Notice>{(err as Error).message}</Notice>
         </main>
-      </AppShell>
+      </>
     );
   }
   if (!project) notFound();
@@ -58,7 +57,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ id: s
     .slice(0, 5);
 
   return (
-    <AppShell activeProjectId={project.id}>
+    <>
       <ProjectHeader project={project} active="insights" health={health} />
       <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-6 py-6">
         {/* KPIs */}
@@ -109,7 +108,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ id: s
           </Panel>
         </div>
       </main>
-    </AppShell>
+    </>
   );
 }
 

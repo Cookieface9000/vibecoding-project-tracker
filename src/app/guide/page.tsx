@@ -15,7 +15,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import AppShell from '@/components/AppShell';
 import ShortcutList from '@/components/guide/ShortcutList';
 import PageHeader from '@/components/PageHeader';
 import { TaskCardBody } from '@/components/TaskCard';
@@ -96,7 +95,7 @@ export default function GuidePage() {
   ];
 
   return (
-    <AppShell guideActive>
+    <>
       <PageHeader>
         <h1 className="text-[14px] font-semibold text-fg">Guide</h1>
         <span className="text-[13px] text-fg-subtle">How to use Vibe Tracker</span>
@@ -282,7 +281,7 @@ export default function GuidePage() {
           </Section>
         </article>
       </div>
-    </AppShell>
+    </>
   );
 }
 

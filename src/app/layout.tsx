@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google';
 import Script from 'next/script';
+import AppShell from '@/components/AppShell';
 import SettingsProvider from '@/components/settings/SettingsProvider';
 import './globals.css';
 
@@ -39,7 +40,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <SettingsProvider>{children}</SettingsProvider>
+        <SettingsProvider>
+          {/* The sidebar stays mounted across pages; only the page inside it changes. */}
+          <AppShell>{children}</AppShell>
+        </SettingsProvider>
       </body>
     </html>
   );

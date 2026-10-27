@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { DEFAULT_SHORTCUTS, comboFromEvent, type ShortcutAction, type ShortcutMap } from '@/lib/shortcuts';
 import { toggleTheme } from '@/lib/theme';
@@ -69,6 +69,10 @@ export default function SettingsProvider({ children }: { children: React.ReactNo
   const [prefs, setPrefsState] = useState<Prefs>(DEFAULT_PREFS);
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(DEFAULT_SHORTCUTS);
   const [openTab, setOpenTab] = useState<SettingsTab | null>(null);
+  const pathname = usePathname();
+
+  // Close Settings when the page changes, e.g. after signing out from the Profile tab.
+  useEffect(() => setOpenTab(null), [pathname]);
 
   // Load saved settings once in the browser. (The inline script in layout.tsx already
   // applied them before first paint, so there's no flash.)

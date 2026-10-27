@@ -1,14 +1,14 @@
 import 'server-only';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { supabase } from './supabase';
 
-// There's no sign-in yet. The current user is whichever member was picked in the sidebar's
-// user switcher (a cookie holding their member id), falling back to the placeholder "Me".
-// AI connections act as the member who created them (see runAsMember).
-// Swap this file for the authenticated user when auth is added.
-export const CURRENT_USER_NAME = 'Me';
+// Demo sign-in: there are no passwords or accounts to create. Signing in picks an existing
+// member and stores their id in a cookie; signing out deletes it, and src/proxy.ts then sends
+// every page to /sign-in. AI connections act as the member who created them (runAsMember).
+// Swap this file for real authentication when it's added.
 export const CURRENT_USER_COOKIE = 'vt_member';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,12 +24,12 @@ export interface CurrentUser {
 // Set while an AI connection's request runs, so everything it does happens as that member.
 const actingAs = new AsyncLocalStorage<string>();
 
-/** Run `work` as the given member, ignoring the switcher cookie. */
+/** Run `work` as the given member, ignoring the sign-in cookie. */
 export function runAsMember<T>(memberId: string, work: () => Promise<T>): Promise<T> {
   return actingAs.run(memberId, work);
 }
 
-async function chosenMemberId(): Promise<string | null> {
+async function signedInMemberId(): Promise<string | null> {
   const forced = actingAs.getStore();
   if (forced) return forced;
   try {
@@ -40,19 +40,22 @@ async function chosenMemberId(): Promise<string | null> {
   }
 }
 
-/** The current user and the teams they belong to (cached per request). */
-export const getCurrentUser = cache(async (): Promise<CurrentUser> => {
-  const db = supabase();
-  const columns = 'id, name, username, avatar';
-  const chosen = await chosenMemberId();
-  let me = chosen ? (await db.from('members').select(columns).eq('id', chosen).maybeSingle()).data : null;
-  // Unknown or removed member in the cookie: fall back to the placeholder user.
-  if (!me) me = (await db.from('members').select(columns).eq('name', CURRENT_USER_NAME).maybeSingle()).data;
-  if (!me) throw new Error(`Current user "${CURRENT_USER_NAME}" not found in members`);
+/** The signed-in user and the teams they belong to, or null when signed out (cached per request; one query). */
+export const getSignedInUser = cache(async (): Promise<CurrentUser | null> => {
+  const id = await signedInMemberId();
+  if (!id) return null;
+  // The member and their team memberships together, so every page starts one round trip sooner.
+  const { data } = await supabase().from('members').select('id, name, username, avatar, team_members(team_id)').eq('id', id).maybeSingle();
+  if (!data) return null; // the member was removed: treat as signed out
+  const me = data as { id: string; name: string; username: string | null; avatar: string | null; team_members: { team_id: string }[] };
+  return { id: me.id, name: me.name, username: me.username, avatar: me.avatar, teamIds: me.team_members.map((m) => m.team_id) };
+});
 
-  const { data: memberships, error: tmError } = await db.from('team_members').select('team_id').eq('member_id', me.id);
-  if (tmError) throw new Error(`Failed to load teams: ${tmError.message}`);
-  return { id: me.id, name: me.name, username: me.username, avatar: me.avatar, teamIds: (memberships ?? []).map((m) => m.team_id as string) };
+/** The signed-in user. Pages and actions that need one send signed-out visitors to /sign-in. */
+export const getCurrentUser = cache(async (): Promise<CurrentUser> => {
+  const user = await getSignedInUser();
+  if (!user) redirect('/sign-in');
+  return user;
 });
 
 /**
