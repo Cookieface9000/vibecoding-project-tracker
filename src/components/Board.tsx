@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { addBlocker, createBlockerTask, deleteAllTasks, handOffTask, moveTask, removeBlocker, type ActionResult } from '@/app/actions';
 import { isBlocked } from '@/lib/blocking';
+import { TOAST_EVENT, type ToastRequest } from '@/lib/clipboard';
 import { STAGES, type BoardTask, type Label, type Member, type Status } from '@/lib/types';
 import EditPicker from './EditPicker';
 import ClearBoardDialog from './ClearBoardDialog';
@@ -127,6 +128,12 @@ export default function Board({
   const [handingOff, setHandingOff] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
+  // Confirmations from elsewhere on the board, e.g. Copy context on a card or in the task view.
+  useEffect(() => {
+    const show = (e: Event) => setToast({ ...(e as CustomEvent<ToastRequest>).detail, id: Date.now() });
+    window.addEventListener(TOAST_EVENT, show);
+    return () => window.removeEventListener(TOAST_EVENT, show);
+  }, []);
   const justDropped = useRef(false);
   // Motion cues: the card just dropped settles in; the card just handed off glows.
   const [settledId, setSettledId] = useState<string | null>(null);

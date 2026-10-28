@@ -6,6 +6,7 @@ import { HEALTH_LABEL, contextHealth, healthBand } from '@/lib/health';
 import { isBlocked } from '@/lib/blocking';
 import BlockerManager, { type BlockerControls } from './BlockerManager';
 import HealthMeter from './HealthMeter';
+import Markdown from './Markdown';
 import PromptLogger from './PromptLogger';
 import TaskOutcomes from './TaskOutcomes';
 import { formatBriefing, hasContext } from '@/lib/context';
@@ -199,11 +200,12 @@ export default function TaskDetails({
         >
           {hasContext(task.context) ? (
             <>
-            <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted p-3 font-mono text-xs leading-5 text-fg-muted">
-              {task.context}
-            </pre>
+            {/* Rendered Markdown; the raw text only shows in Edit. */}
+            <div tabIndex={0} aria-label="Context" className="max-h-72 overflow-y-auto rounded-lg bg-muted p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+              <Markdown>{task.context}</Markdown>
+            </div>
             <div className="mt-2 flex justify-end">
-              <CopyButton getText={() => formatBriefing(task, projectCode)} />
+              <CopyButton getText={() => formatBriefing(task, projectCode)} confirm={`the ${task.ref} briefing`} />
             </div>
             </>
           ) : (

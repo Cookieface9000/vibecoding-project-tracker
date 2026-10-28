@@ -3,6 +3,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { Check, Copy, Lock, MessageSquareText } from 'lucide-react';
 import { useState } from 'react';
+import { copyBriefing } from '@/lib/clipboard';
 import { formatBriefing, hasContext } from '@/lib/context';
 import { dueLabel, dueState } from '@/lib/due';
 import { contextHealth } from '@/lib/health';
@@ -96,8 +97,8 @@ export function TaskCardBody({
 }
 
 /**
- * Copy this task's briefing straight from the board. Stops the click, pointer and key
- * events so it never opens the task or starts a drag.
+ * Copy this task's briefing straight from the board, confirmed by a tick and the board's toast.
+ * Stops the click, pointer and key events so it never opens the task or starts a drag.
  */
 function CardCopyButton({ task, projectCode }: { task: BoardTask; projectCode: string }) {
   const [copied, setCopied] = useState(false);
@@ -105,21 +106,9 @@ function CardCopyButton({ task, projectCode }: { task: BoardTask; projectCode: s
 
   async function copy(e: React.MouseEvent) {
     e.stopPropagation();
-    const text = formatBriefing(task, projectCode);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const area = document.createElement('textarea');
-      area.value = text;
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand('copy');
-      area.remove();
-    }
+    if (!(await copyBriefing(formatBriefing(task, projectCode), `the ${task.ref} briefing`))) return;
     setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (

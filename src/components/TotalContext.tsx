@@ -8,6 +8,7 @@ import { averageHealth } from '@/lib/health';
 import type { BoardTask, Label, Project } from '@/lib/types';
 import CopyButton from './CopyButton';
 import HealthMeter from './HealthMeter';
+import Markdown from './Markdown';
 import Modal, { ModalHeader, btn } from './Modal';
 
 export type BoardProjectInfo = Pick<Project, 'name' | 'code' | 'client' | 'description' | 'teamName'>;
@@ -69,13 +70,14 @@ export default function TotalContext({ project, tasks, labels }: { project: Boar
               Every task on this board, grouped by stage, each with its own labelled context. Paste it into Claude, ChatGPT or
               Cursor to brief an AI on the whole project at once.
             </p>
-            <pre
+            {/* Rendered preview; Copy still copies the raw Markdown for pasting into an AI. */}
+            <div
               tabIndex={0}
               aria-label="Total context preview"
-              className="whitespace-pre-wrap border border-line bg-muted p-4 font-mono text-[12px] leading-5 text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="border border-line bg-muted p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
-              {markdown}
-            </pre>
+              <Markdown>{markdown}</Markdown>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-4">
@@ -89,6 +91,7 @@ export default function TotalContext({ project, tasks, labels }: { project: Boar
               <CopyButton
                 getText={() => markdown}
                 label="Copy total context"
+                confirm="the whole board's context"
                 className="!h-8 !border-brand !bg-brand !px-3 !text-[13px] !text-brand-fg hover:!bg-brand-hover"
               />
             </div>

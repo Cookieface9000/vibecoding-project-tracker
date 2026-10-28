@@ -6,6 +6,7 @@ import { deleteOutcome, recordOutcome, updateOutcome } from '@/app/actions';
 import { hasContext } from '@/lib/context';
 import { outcomeSubjectLabel } from '@/lib/outcome-labels';
 import { OUTCOME_RESULTS, type BoardTask, type OutcomeResult, type OutcomeSubject, type TaskOutcome } from '@/lib/types';
+import Markdown from './Markdown';
 import { btn, field, fieldLabel } from './ui';
 
 // Inside a task: a log of whether its prompts and context worked, and why, written by a person.
@@ -139,9 +140,9 @@ function OutcomeView({ task, outcome: o, onEdit, onChanged }: { task: BoardTask;
       {o.contextSnapshot && (
         <details className="mt-1.5">
           <summary className="cursor-pointer text-[12px] text-brand-ink">Context as it was then</summary>
-          <pre tabIndex={0} className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-line bg-muted p-2 font-mono text-[11px] leading-5 text-fg-muted">
-            {o.contextSnapshot}
-          </pre>
+          <div tabIndex={0} aria-label="Context as it was then" className="mt-1 max-h-56 overflow-auto rounded border border-line bg-muted p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+            <Markdown>{o.contextSnapshot}</Markdown>
+          </div>
         </details>
       )}
       {error && (

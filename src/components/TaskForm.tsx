@@ -293,7 +293,11 @@ export default function TaskForm({
               <MessageSquareText className="h-3.5 w-3.5" aria-hidden />
               Context <span className="normal-case tracking-normal text-fg-subtle">(Markdown)</span>
             </label>
-            <CopyButton getText={() => formatBriefing({ title, description, context }, projectCode)} label="Copy context" />
+            <CopyButton
+              getText={() => formatBriefing({ title, description, context }, projectCode)}
+              label="Copy context"
+              confirm={task ? `the ${task.ref} briefing` : 'the new task briefing'}
+            />
           </div>
           <textarea
             id="task-context"

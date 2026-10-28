@@ -2,37 +2,27 @@
 
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
+import { copyBriefing, copyText } from '@/lib/clipboard';
 
-// Copies `getText()` and confirms with "Copied" (announced to screen readers).
+// Copies `getText()` and confirms with "Copied" (announced to screen readers). With `confirm`
+// (what's being copied, e.g. "the DEMO-3 briefing") it also shows the board's confirmation toast.
 export default function CopyButton({
   getText,
   label = 'Copy context',
+  confirm,
   className = '',
 }: {
   getText: () => string;
   label?: string;
+  confirm?: string;
   className?: string;
 }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   async function copy() {
     const text = getText();
-    try {
-      await navigator.clipboard.writeText(text);
-      setState('copied');
-    } catch {
-      // Fallback for browsers/contexts that block the async clipboard API.
-      const area = document.createElement('textarea');
-      area.value = text;
-      area.setAttribute('readonly', '');
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.select();
-      const ok = document.execCommand('copy');
-      area.remove();
-      setState(ok ? 'copied' : 'failed');
-    }
+    const ok = confirm ? await copyBriefing(text, confirm) : await copyText(text);
+    setState(ok ? 'copied' : 'failed');
     setTimeout(() => setState('idle'), 2000);
   }
 
